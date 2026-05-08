@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(Get-ChildItem \"c:\\\\eficar-dashboard\" -ErrorAction SilentlyContinue; if \\(-not \\(Test-Path \"c:\\\\eficar-dashboard\"\\)\\) { \"Directory does not exist\" })",
+      "Read(//c/managebe/**)"
+    ],
+    "additionalDirectories": [
+      "c:\\managebe\\src\\app\\(advertiser)\\proposal\\new",
+      "c:\\managebe\\src\\app\\auth\\callback",
+      "c:\\managebe\\src\\app\\(creator)\\media-kit",
+      "c:\\managebe\\src\\app\\(creator)\\deals"
+    ]
+  }
+}
