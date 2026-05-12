@@ -43,10 +43,10 @@ ${month} 고객사별 실적:
 ${lines}
 
 위 데이터를 분석해 4가지 인사이트를 한국어로 작성하세요.
-각 항목은 구체적 고객사명과 수치를 포함해 2문장 이내로 작성하세요.
+각 항목은 고객사명과 수치를 포함해 1문장으로 간결하게 작성하세요.
 
 응답은 반드시 순수 JSON만 출력하세요. 설명, 마크다운, 코드블록 없이 아래 형식 그대로:
-{"achievement":"...","warning":"...","opportunity":"...","action":"..."}`;
+{"achievement":"한 문장","warning":"한 문장","opportunity":"한 문장","action":"한 문장"}`;
 
   const res = await fetch(
     `https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
@@ -55,7 +55,7 @@ ${lines}
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { temperature: 0.5, maxOutputTokens: 2000 },
+        generationConfig: { temperature: 0.5, maxOutputTokens: 1024 },
       }),
     },
   );
