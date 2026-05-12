@@ -1,3 +1,5 @@
+import { syncUpsert, syncDelete } from './syncManager';
+
 const KEY = 'eficar-campaigns';
 
 export type CampaignChannel = 'linkedin' | 'kakao' | 'email' | 'cardnews' | 'etc';
@@ -50,15 +52,20 @@ export function getCampaigns(): CampaignRecord[] {
 export function addCampaign(item: Omit<CampaignRecord, 'id' | 'createdAt'>): CampaignRecord {
   const rec: CampaignRecord = { ...item, id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, createdAt: new Date().toISOString() };
   save([...load(), rec]);
+  syncUpsert('campaigns', rec as unknown as Record<string, unknown>);
   return rec;
 }
 
 export function updateCampaign(id: string, patch: Partial<CampaignRecord>) {
-  save(load().map(r => r.id === id ? { ...r, ...patch } : r));
+  const updated = load().map(r => r.id === id ? { ...r, ...patch } : r);
+  save(updated);
+  const rec = updated.find(r => r.id === id);
+  if (rec) syncUpsert('campaigns', rec as unknown as Record<string, unknown>);
 }
 
 export function deleteCampaign(id: string) {
   save(load().filter(r => r.id !== id));
+  syncDelete('campaigns', id);
 }
 
 export function isDuplicateCampaign(date: string, contentSummary: string): boolean {

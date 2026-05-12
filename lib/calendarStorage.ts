@@ -1,3 +1,5 @@
+import { syncUpsert, syncDelete } from './syncManager';
+
 const KEY = 'eficar-calendar';
 
 export type CalendarChannel = 'linkedin' | 'kakao' | 'email' | 'cardnews' | 'etc';
@@ -30,15 +32,20 @@ export function getEventsForMonth(yearMonth: string): CalendarEvent[] {
 }
 
 export function addCalendarEvent(event: Omit<CalendarEvent, 'id'>): CalendarEvent {
-  const newEvent: CalendarEvent = { ...event, id: Date.now().toString() };
+  const newEvent: CalendarEvent = { ...event, id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}` };
   save([...load(), newEvent]);
+  syncUpsert('calendar_events', newEvent as unknown as Record<string, unknown>);
   return newEvent;
 }
 
 export function updateCalendarEvent(id: string, patch: Partial<CalendarEvent>) {
-  save(load().map(e => e.id === id ? { ...e, ...patch } : e));
+  const updated = load().map(e => e.id === id ? { ...e, ...patch } : e);
+  save(updated);
+  const ev = updated.find(e => e.id === id);
+  if (ev) syncUpsert('calendar_events', ev as unknown as Record<string, unknown>);
 }
 
 export function deleteCalendarEvent(id: string) {
   save(load().filter(e => e.id !== id));
+  syncDelete('calendar_events', id);
 }

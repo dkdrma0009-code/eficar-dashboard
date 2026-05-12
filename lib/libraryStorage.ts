@@ -1,3 +1,5 @@
+import { syncUpsert, syncDelete } from './syncManager';
+
 const KEY = 'eficar-library';
 
 export type LibraryContentType = 'linkedin' | 'kakao' | 'email' | 'card' | 'cardnews';
@@ -27,15 +29,20 @@ export function getLibrary(): LibraryItem[] {
 }
 
 export function addLibraryItem(item: Omit<LibraryItem, 'id' | 'createdAt'>): LibraryItem {
-  const newItem: LibraryItem = { ...item, id: Date.now().toString(), createdAt: new Date().toISOString() };
+  const newItem: LibraryItem = { ...item, id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, createdAt: new Date().toISOString() };
   save([...load(), newItem]);
+  syncUpsert('library_items', newItem as unknown as Record<string, unknown>);
   return newItem;
 }
 
 export function deleteLibraryItem(id: string) {
   save(load().filter(i => i.id !== id));
+  syncDelete('library_items', id);
 }
 
 export function updateLibraryItem(id: string, patch: Partial<LibraryItem>) {
-  save(load().map(i => i.id === id ? { ...i, ...patch } : i));
+  const updated = load().map(i => i.id === id ? { ...i, ...patch } : i);
+  save(updated);
+  const item = updated.find(i => i.id === id);
+  if (item) syncUpsert('library_items', item as unknown as Record<string, unknown>);
 }
