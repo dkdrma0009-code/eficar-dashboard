@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Copy, Check, RefreshCw, Sparkles, Zap, ExternalLink, Send, Mail, BookOpen } from 'lucide-react';
 import { addLibraryItem } from '@/lib/libraryStorage';
 import { addCalendarEvent } from '@/lib/calendarStorage';
-import { addCampaign } from '@/lib/campaignStorage';
+import { addCampaign, getCampaigns } from '@/lib/campaignStorage';
 import { useDashboardData } from '@/lib/DataContext';
 import {
   computeViewData, getCustomerTopItems, categorizeProduct,
@@ -352,6 +352,12 @@ export default function ContentPage() {
     setAiError('');
     setAiText('');
     try {
+      const allCampaigns = getCampaigns();
+      const campaignHistory = allCampaigns
+        .filter(c => c.customer === contentData.customer)
+        .slice(0, 5)
+        .map(c => ({ date: c.date, contentSummary: c.contentSummary, outcome: c.outcome, channel: c.channel }));
+
       const res = await fetch('/api/content-generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -368,6 +374,7 @@ export default function ContentPage() {
           topItem: contentData.topItem,
           monthsActive: contentData.monthsActive,
           missing: contentData.missing,
+          campaignHistory,
         }),
       });
       const json = await res.json();

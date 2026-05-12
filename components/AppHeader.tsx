@@ -11,6 +11,7 @@ const NAV = [
   { href: '/library',    label: '라이브러리' },
   { href: '/calendar',   label: '캘린더' },
   { href: '/campaigns',  label: '캠페인' },
+  { href: '/ai-coach',   label: '🤖 AI 코치' },
   { href: '/report',     label: '보고서' },
   { href: '/calculator', label: '계산기' },
   { href: '/compare',    label: '비교' },

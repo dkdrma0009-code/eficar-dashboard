@@ -11,7 +11,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const { type, customer, month, currentSales, prevGrowth, isOngoing, isB2C, totalSales, savingsStr, topItem, monthsActive, missing } = await req.json();
+  const { type, customer, month, currentSales, prevGrowth, isOngoing, isB2C, totalSales, savingsStr, topItem, monthsActive, missing, campaignHistory } = await req.json();
   if (!type) return NextResponse.json({ error: '콘텐츠 유형을 입력해주세요.' }, { status: 400 });
 
   const missingText = missing?.length > 0 ? `미도입 품목: ${missing.join(', ')}` : '없음';
@@ -54,7 +54,11 @@ export async function POST(req: NextRequest) {
 - 전체 10줄 이상`,
   };
 
-  const prompt = `당신은 에픽카(자동차 대체부품 B2B 솔루션) 영업팀의 마케팅 전문가입니다.
+  const historySection = campaignHistory?.length > 0
+    ? `\n[이 고객사 과거 캠페인 히스토리 — 반복되지 않도록 새로운 각도로 접근]\n${campaignHistory.slice(0, 5).map((h: { date: string; contentSummary: string; outcome: string; channel: string }) => `- ${h.date} ${h.channel}: "${h.contentSummary}" → ${h.outcome}`).join('\n')}\n`
+    : '';
+
+  const prompt = `당신은 에픽카(자동차 대체부품 B2B 솔루션) 영업팀의 마케팅 전문가입니다.${historySection}
 
 [대상 고객 유형: ${isB2C ? 'B2C 개인 차주 — 친근하고 개인적인 톤, "차주님" 또는 "고객님" 호칭, 절감액·혜택 중심으로 작성' : 'B2B 법인 담당자 — 전문적이고 신뢰감 있는 비즈니스 톤'}]
 
