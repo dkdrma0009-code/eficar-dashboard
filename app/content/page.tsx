@@ -86,25 +86,25 @@ function computeContent(data: DashboardData, customer: string, month: string, is
 type ContentData = ReturnType<typeof computeContent>;
 
 function emphasisBlocks(d: ContentData, emphasis: string[]): string[] {
-  const all = emphasis.length === 0;
-  const blocks: string[] = [];
+  // 사용 가능한 전체 블록 목록
+  const pool: { key: string; text: string }[] = [];
+  if (d.growthStr)
+    pool.push({ key: 'growth',   text: `📈 전월 대비 성장: ${d.growthStr}` });
+  pool.push({ key: 'savings',  text: `💰 OEM 대비 절감액: ${d.savingsStr} (누적)` });
+  pool.push({ key: 'expand',   text: d.missing.length > 0
+    ? `🔧 확대 가능 품목: ${d.missing.slice(0, 2).join(', ')} 등 ${d.missing.length}개`
+    : `🔧 주요 공급 품목: ${d.topItem}` });
+  pool.push({ key: 'newpropo', text: d.missing.length > 0
+    ? `🆕 신규 제안 품목: ${d.missing.join(', ')}`
+    : `🆕 현재 ${d.topItem} 위주로 공급 중` });
+  pool.push({ key: 'total',    text: `📊 누적 공급액: ${d.totalSales} (${d.monthsActive}개월 거래)` });
 
-  if ((all || emphasis.includes('growth')) && d.growthStr)
-    blocks.push(`📈 전월 대비 성장: ${d.growthStr}`);
-  if (all || emphasis.includes('savings'))
-    blocks.push(`💰 OEM 대비 절감액: ${d.savingsStr} (누적)`);
-  if (all || emphasis.includes('expand'))
-    blocks.push(d.missing.length > 0
-      ? `🔧 확대 가능 품목: ${d.missing.slice(0, 2).join(', ')} 등 ${d.missing.length}개`
-      : `🔧 주요 공급 품목: ${d.topItem}`);
-  if (all || emphasis.includes('newpropo'))
-    blocks.push(d.missing.length > 0
-      ? `🆕 신규 제안 품목: ${d.missing.join(', ')}`
-      : `🆕 현재 ${d.topItem} 위주로 공급 중`);
-  if (all || emphasis.includes('total'))
-    blocks.push(`📊 누적 공급액: ${d.totalSales} (${d.monthsActive}개월 거래)`);
+  if (emphasis.length === 0) return pool.map(b => b.text);
 
-  return blocks;
+  // 선택된 항목을 앞에, 나머지 중 2개를 뒤에 추가 (내용이 비지 않도록)
+  const selected = pool.filter(b => emphasis.includes(b.key));
+  const rest     = pool.filter(b => !emphasis.includes(b.key)).slice(0, 2);
+  return [...selected, ...rest].map(b => b.text);
 }
 
 function emphasisOpener(emphasis: string[], d: ReturnType<typeof computeContent>): string {
