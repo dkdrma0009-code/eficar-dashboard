@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useMemo, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useMemo, useCallback, useEffect } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Copy, Check, RefreshCw, Sparkles, Zap, ExternalLink, Send, Mail, BookOpen } from 'lucide-react';
 import { addLibraryItem } from '@/lib/libraryStorage';
 import { addCalendarEvent } from '@/lib/calendarStorage';
@@ -218,8 +218,21 @@ ${blockText}`;
 export default function ContentPage() {
   const { data } = useDashboardData();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [contentType, setContentType] = useState<ContentType>('kakao');
   const [customer, setCustomer] = useState('__all__');
+
+  const [linkedProposal, setLinkedProposal] = useState<{ title: string; items: string; nextStep: string } | null>(null);
+
+  useEffect(() => {
+    const c = searchParams.get('customer');
+    if (c) setCustomer(c);
+    // 제안서에서 넘어온 경우 sessionStorage에서 제안 내용 로드
+    try {
+      const raw = sessionStorage.getItem('eficar-proposal-context');
+      if (raw) { setLinkedProposal(JSON.parse(raw)); setAiMode(true); }
+    } catch {}
+  }, [searchParams]);
   const [month, setMonth] = useState('');
   const [emphasis, setEmphasis] = useState<string[]>([]);
   const [version, setVersion] = useState(0);
@@ -249,6 +262,7 @@ export default function ContentPage() {
   }, [contentData, contentType, emphasis, version]);
 
   const toggleEmphasis = (key: string) => {
+    setAiText('');
     setEmphasis(prev => prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]);
   };
 
@@ -362,6 +376,7 @@ export default function ContentPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          proposalContext: linkedProposal ?? undefined,
           type: contentType,
           customer: contentData.customer,
           month: contentData.todayLabel,
@@ -494,6 +509,15 @@ export default function ContentPage() {
               {emphasis.length === 0 && <p style={{ fontSize: 11, color: '#8B95A1', marginTop: 8 }}>선택 없으면 전체 항목 포함</p>}
             </div>
 
+            {/* 제안서 연동 배지 */}
+            {linkedProposal && (
+              <div style={{ padding: '8px 12px', background: '#E6F2F2', border: '1px solid #A7F3D0', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                <span style={{ fontSize: 12, color: '#005957', fontWeight: 600 }}>📋 제안서 연동됨: {linkedProposal.title}</span>
+                <button onClick={() => { setLinkedProposal(null); sessionStorage.removeItem('eficar-proposal-context'); }}
+                  style={{ fontSize: 11, color: '#8B95A1', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>✕ 해제</button>
+              </div>
+            )}
+
             {/* AI / 템플릿 토글 */}
             <div style={{ display: 'flex', background: '#F2F4F6', borderRadius: 12, padding: 4, gap: 4 }}>
               <button onClick={() => { setAiMode(false); setAiText(''); }}
@@ -587,7 +611,7 @@ export default function ContentPage() {
               <div style={{
                 flex: 1, background: '#F8F9FA', borderRadius: 12, padding: '20px',
                 fontSize: 14, lineHeight: 1.9, color: '#191F28',
-                whiteSpace: 'pre-wrap', minHeight: 360,
+                minHeight: 360,
                 border: `1px solid ${aiMode && aiText ? '#005957' : '#F2F4F6'}`,
               }}>
                 {aiMode && aiLoading ? (
@@ -595,10 +619,34 @@ export default function ContentPage() {
                     <div style={{ width: 36, height: 36, border: '3px solid #E6F2F2', borderTopColor: '#005957', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
                     <span style={{ fontSize: 13 }}>AI가 문구를 작성하고 있습니다...</span>
                   </div>
-                ) : activeText ? activeText : (
+                ) : activeText ? (
+                  <div style={{ whiteSpace: 'pre-wrap' }}>
+                    {activeText.split('\n').map((line, i) => {
+                      const emphEmojis: Record<string, string> = { growth: '📈', savings: '💰', expand: '🔧', newpropo: '🆕', total: '📊' };
+                      const isHighlighted = emphasis.length > 0 && emphasis.some(key => line.startsWith(emphEmojis[key] ?? '\x00'));
+                      return (
+                        <span key={i} style={{
+                          display: 'block',
+                          background: isHighlighted ? '#FFFDE7' : 'transparent',
+                          fontWeight: isHighlighted ? 700 : 400,
+                          borderLeft: isHighlighted ? '3px solid #F59E0B' : '3px solid transparent',
+                          paddingLeft: isHighlighted ? 8 : 0,
+                          borderRadius: 4,
+                          transition: 'all 0.15s',
+                        }}>
+                          {line || ' '}
+                        </span>
+                      );
+                    })}
+                  </div>
+                ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 8 }}>
                     <p style={{ fontSize: 32 }}>✍️</p>
-                    <p style={{ fontSize: 13, color: '#8B95A1' }}>{aiMode ? 'AI로 생성하기를 눌러주세요' : '좌측 설정 후 생성하기를 눌러주세요'}</p>
+                    <p style={{ fontSize: 13, color: '#8B95A1' }}>
+                      {aiMode
+                        ? linkedProposal ? '제안서 내용을 반영해 AI 생성합니다' : 'AI로 생성하기를 눌러주세요'
+                        : '좌측 설정 후 생성하기를 눌러주세요'}
+                    </p>
                   </div>
                 )}
               </div>

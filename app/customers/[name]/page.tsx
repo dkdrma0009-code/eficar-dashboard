@@ -1,415 +1,441 @@
 'use client';
-
-import { useParams, useRouter } from 'next/navigation';
-import { useState, useEffect } from 'react';
-import { ArrowLeft, FileText, Target, BookOpen, Phone, Calendar } from 'lucide-react';
+import { use, useMemo, useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Cell,
-  PieChart, Pie, ResponsiveContainer,
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
+  ResponsiveContainer, Cell,
 } from 'recharts';
+import { ArrowLeft, TrendingUp, TrendingDown, Target, Send, FileText, Plus, ChevronRight } from 'lucide-react';
 import { useDashboardData } from '@/lib/DataContext';
-import {
-  getCustomerMonthlyData, getCustomerTopItems, getCustomerPartTypeData,
-  formatCurrency, formatCurrencyFull, formatPercent, formatMonth, formatAxisMonth,
-  GRADE_CONFIG, getCustomerGrade, PIE_COLORS,
-} from '@/lib/dataUtils';
+import { getCampaigns } from '@/lib/campaignStorage';
 import { getGoal, setGoal } from '@/lib/goalsStorage';
-import { getCRMNote, setCRMNote, type CRMNote } from '@/lib/crmStorage';
-import CustomerReportModal from '@/components/CustomerReportModal';
+import { categorizeProduct, GRADE_CONFIG } from '@/lib/dataUtils';
+import type { CampaignRecord } from '@/lib/campaignStorage';
 
-const SAVINGS_RATE = 0.30;
+const SLUG_MATCH: Record<string, (n: string) => boolean> = {
+  sk:    (n) => /sk/i.test(n),
+  lotte: (n) => /롯데|그린카/i.test(n),
+};
 
-export default function CustomerDetailPage() {
-  const { name: encodedName } = useParams<{ name: string }>();
-  const name = decodeURIComponent(encodedName);
+const OUTCOME_LABEL: Record<string, string> = {
+  sent: '발송', responded: '반응', meeting: '미팅', proposal: '제안', closed: '완료',
+};
+const OUTCOME_COLOR: Record<string, string> = {
+  sent: '#8B95A1', responded: '#3B82F6', meeting: '#F59E0B', proposal: '#8B5CF6', closed: '#005957',
+};
+const CHANNEL_LABEL: Record<string, string> = {
+  linkedin: 'LinkedIn', kakao: '카카오톡', email: '이메일', cardnews: '카드뉴스', etc: '기타',
+};
+
+function fmt(n: number) {
+  if (n >= 100_000_000) return `${(n / 100_000_000).toFixed(1)}억`;
+  if (n >= 10_000_000) return `${(n / 10_000_000).toFixed(0)}천만`;
+  if (n >= 10_000) return `${(n / 10_000).toFixed(0)}만`;
+  return n.toLocaleString();
+}
+
+function fmtAxis(n: number) {
+  if (n === 0) return '0';
+  if (n >= 100_000_000) return `${(n / 100_000_000).toFixed(0)}억`;
+  if (n >= 10_000_000) return `${(n / 10_000_000).toFixed(0)}천`;
+  if (n >= 10_000) return `${(n / 10_000).toFixed(0)}만`;
+  return n.toString();
+}
+
+function getPrevMonth(m: string) {
+  const [y, mo] = m.split('-').map(Number);
+  return mo === 1 ? `${y - 1}-12` : `${y}-${String(mo - 1).padStart(2, '0')}`;
+}
+
+export default function CustomerDetailPage({ params }: { params: Promise<{ name: string }> }) {
+  const { name: slug } = use(params);
   const router = useRouter();
   const { data } = useDashboardData();
 
-  const [selectedMonth, setSelectedMonth] = useState('');
-  const [showReport, setShowReport] = useState(false);
-  const [goalInput, setGoalInput] = useState('');
+  const [campaigns, setCampaigns] = useState<CampaignRecord[]>([]);
   const [goal, setGoalState] = useState(0);
-  const [crm, setCrm] = useState<CRMNote>({ lastContact: '', nextMeeting: '', memo: '' });
-  const [crmSaved, setCrmSaved] = useState(false);
+  const [goalInput, setGoalInput] = useState('');
+  const [editingGoal, setEditingGoal] = useState(false);
+  const [campaignFilter, setCampaignFilter] = useState<string>('all');
+  const [showAllCampaigns, setShowAllCampaigns] = useState(false);
+
+  const matcher = SLUG_MATCH[slug];
+
+  const customerName = useMemo(() => {
+    if (!data || !matcher) return '';
+    return data.customers.find(c => matcher(c)) ?? '';
+  }, [data, matcher]);
 
   useEffect(() => {
-    if (data && !selectedMonth) setSelectedMonth(data.currentMonth);
-  }, [data, selectedMonth]);
-
-  useEffect(() => {
-    const g = getGoal(name);
+    if (!customerName) return;
+    const all = getCampaigns();
+    setCampaigns(all.filter(c => c.customer === customerName));
+    const g = getGoal(customerName);
     setGoalState(g);
-    setGoalInput(g > 0 ? g.toLocaleString() : '');
-    setCrm(getCRMNote(name));
-  }, [name]);
+    setGoalInput(g > 0 ? String(Math.round(g / 10000)) : '');
+  }, [customerName]);
+
+  const monthlyStats = useMemo(() => {
+    if (!data || !customerName) return [];
+    return data.allMonths.map(month => {
+      const recs = data.records.filter(r => r.date === month && r.service === customerName);
+      return { month, sales: recs.reduce((s, r) => s + r.amount, 0), count: recs.length };
+    });
+  }, [data, customerName]);
+
+  const latestMonth = data?.latestMonth ?? '';
+  const currentMonth = data?.currentMonth ?? '';
+
+  const currentStats = useMemo(() => {
+    const cur = monthlyStats.find(m => m.month === currentMonth);
+    const prev = monthlyStats.find(m => m.month === getPrevMonth(currentMonth));
+    const cs = cur?.sales ?? 0;
+    const ps = prev?.sales ?? 0;
+    const growth = ps === 0 ? (cs > 0 ? 100 : 0) : ((cs - ps) / ps) * 100;
+    const total = data?.records.filter(r => r.service === customerName).reduce((s, r) => s + r.amount, 0) ?? 0;
+    const monthsActive = monthlyStats.filter(m => m.sales > 0).length;
+    return { cs, ps, growth, total, monthsActive };
+  }, [monthlyStats, currentMonth, data, customerName]);
+
+  const productBreakdown = useMemo(() => {
+    if (!data || !customerName) return [];
+    const recs = data.records.filter(r => r.date === currentMonth && r.service === customerName);
+    const map = new Map<string, number>();
+    recs.forEach(r => {
+      const cat = categorizeProduct(r.itemName);
+      map.set(cat, (map.get(cat) ?? 0) + r.amount);
+    });
+    return [...map.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 8)
+      .map(([name, value]) => ({ name, value }));
+  }, [data, customerName, currentMonth]);
+
+  const totalProductSales = productBreakdown.reduce((s, p) => s + p.value, 0);
+
+  const campaignStats = useMemo(() => {
+    const total = campaigns.length;
+    const responded = campaigns.filter(c => ['responded', 'meeting', 'proposal', 'closed'].includes(c.outcome)).length;
+    const meeting = campaigns.filter(c => ['meeting', 'proposal', 'closed'].includes(c.outcome)).length;
+    const closed = campaigns.filter(c => c.outcome === 'closed').length;
+    return { total, responded, meeting, closed, rate: total > 0 ? Math.round((meeting / total) * 100) : 0 };
+  }, [campaigns]);
+
+  const filteredCampaigns = useMemo(() => {
+    const list = campaignFilter === 'all' ? campaigns : campaigns.filter(c => c.outcome === campaignFilter);
+    return showAllCampaigns ? list : list.slice(0, 6);
+  }, [campaigns, campaignFilter, showAllCampaigns]);
+
+  const goalPct = goal > 0 ? Math.min(Math.round((currentStats.cs / goal) * 100), 999) : 0;
+
+  const gradeKey = currentStats.cs === 0 ? 'danger'
+    : currentStats.cs >= 50_000_000 || currentStats.growth >= 20 ? 'vip'
+    : currentStats.growth <= -60 ? 'danger'
+    : currentStats.growth <= -30 ? 'warning'
+    : currentStats.ps === 0 && currentStats.cs > 0 ? 'new'
+    : 'normal';
+  const grade = GRADE_CONFIG[gradeKey];
+
+  const saveGoal = () => {
+    const v = parseInt(goalInput.replace(/,/g, ''), 10);
+    const amount = isNaN(v) ? 0 : v * 10000;
+    setGoal(customerName, amount);
+    setGoalState(amount);
+    setEditingGoal(false);
+  };
+
+  if (!matcher) {
+    return (
+      <main style={{ padding: 40, textAlign: 'center' }}>
+        <p style={{ color: '#8B95A1' }}>지원하지 않는 고객사입니다.</p>
+        <Link href="/" style={{ color: '#005957', fontSize: 14 }}>← 대시보드로</Link>
+      </main>
+    );
+  }
 
   if (!data) {
     return (
-      <main style={{ minHeight: 'calc(100vh - 56px)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <div style={{ textAlign: 'center' }}>
-          <p style={{ fontSize: 48, marginBottom: 16 }}>📂</p>
-          <h2 style={{ fontSize: 20, fontWeight: 700, color: '#191F28', marginBottom: 8 }}>데이터를 먼저 업로드하세요</h2>
-          <a href="/" className="btn-primary" style={{ display: 'inline-flex', marginTop: 20, textDecoration: 'none' }}>대시보드로 이동</a>
-        </div>
+      <main style={{ padding: 40, textAlign: 'center' }}>
+        <p style={{ fontSize: 32, marginBottom: 16 }}>📂</p>
+        <p style={{ color: '#8B95A1', marginBottom: 16 }}>엑셀 파일을 먼저 업로드해주세요.</p>
+        <Link href="/" style={{ color: '#005957', fontSize: 14 }}>← 대시보드로</Link>
       </main>
     );
   }
 
-  if (!data.customers.includes(name)) {
+  if (!customerName) {
     return (
-      <main style={{ minHeight: 'calc(100vh - 56px)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <div style={{ textAlign: 'center' }}>
-          <p style={{ fontSize: 48, marginBottom: 16 }}>🔍</p>
-          <h2 style={{ fontSize: 20, fontWeight: 700, color: '#191F28', marginBottom: 8 }}>고객사를 찾을 수 없습니다</h2>
-          <button onClick={() => router.back()} className="btn-primary" style={{ marginTop: 20 }}>뒤로 가기</button>
-        </div>
+      <main style={{ padding: 40, textAlign: 'center' }}>
+        <p style={{ color: '#8B95A1' }}>해당 고객사 데이터가 없습니다.</p>
+        <Link href="/" style={{ color: '#005957', fontSize: 14 }}>← 대시보드로</Link>
       </main>
     );
   }
-
-  const activeMonth = selectedMonth || data.currentMonth;
-  const monthlyData = getCustomerMonthlyData(data.records, name, data.allMonths);
-  const topItems = getCustomerTopItems(data.records, name, activeMonth, 10);
-  const partTypeData = getCustomerPartTypeData(data.records, name, activeMonth);
-
-  const currentData = monthlyData.find(d => d.month === activeMonth);
-  const prevMonthKey = (() => {
-    const idx = data.allMonths.indexOf(activeMonth);
-    return idx > 0 ? data.allMonths[idx - 1] : '';
-  })();
-  const prevData = monthlyData.find(d => d.month === prevMonthKey);
-  const currentSales = currentData?.sales ?? 0;
-  const prevSales = prevData?.sales ?? 0;
-  const growth = prevSales === 0 ? 0 : ((currentSales - prevSales) / prevSales) * 100;
-  const totalSales = monthlyData.reduce((s, d) => s + d.sales, 0);
-  const savings = Math.round(totalSales * SAVINGS_RATE);
-  const grade = getCustomerGrade(currentSales, prevSales, growth);
-  const gradeConfig = GRADE_CONFIG[grade];
-
-  const achievementRate = goal > 0 ? (currentSales / goal) * 100 : 0;
-  const ptTotal = partTypeData.reduce((s, p) => s + p.value, 0);
-
-  function saveGoal() {
-    const val = parseInt(goalInput.replace(/,/g, ''), 10) || 0;
-    setGoal(name, val);
-    setGoalState(val);
-  }
-
-  function saveCRM() {
-    setCRMNote(name, crm);
-    setCrmSaved(true);
-    setTimeout(() => setCrmSaved(false), 2000);
-  }
-
-  const achColor = achievementRate >= 100 ? '#005957' : achievementRate >= 70 ? '#F59E0B' : '#F04452';
 
   return (
-    <>
-      <main style={{ minHeight: 'calc(100vh - 56px)', background: '#F8F9FA' }}>
-        <div style={{ maxWidth: 1400, margin: '0 auto', padding: '24px' }}>
+    <main style={{ maxWidth: 1100, margin: '0 auto', padding: '24px 24px 60px' }}>
+      <button onClick={() => router.back()} style={{
+        display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: 'none',
+        cursor: 'pointer', color: '#8B95A1', fontSize: 13, marginBottom: 20, padding: 0,
+      }}>
+        <ArrowLeft style={{ width: 15, height: 15 }} /> 뒤로
+      </button>
 
-          {/* 헤더 */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-              <button onClick={() => router.back()}
-                style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 8, border: '1px solid #F2F4F6', background: 'white', color: '#8B95A1', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
-                <ArrowLeft style={{ width: 14, height: 14 }} />
-                뒤로
-              </button>
-              <div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <h1 style={{ fontSize: 22, fontWeight: 800, color: '#191F28' }}>{name}</h1>
-                  <span className="badge" style={{ background: gradeConfig.bg, color: gradeConfig.color, fontSize: 12 }}>
-                    {gradeConfig.label}
-                  </span>
-                </div>
-                <p style={{ fontSize: 13, color: '#8B95A1', marginTop: 2 }}>고객사 상세 분석</p>
-              </div>
+      {/* 헤더 */}
+      <div className="card" style={{ marginBottom: 20, padding: '24px 28px' }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 16 }}>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
+              <h1 style={{ fontSize: 22, fontWeight: 800, color: '#191F28' }}>{customerName}</h1>
+              <span style={{ padding: '3px 10px', borderRadius: 20, fontSize: 12, fontWeight: 700, background: grade.bg, color: grade.color }}>
+                {grade.label}
+              </span>
+              {latestMonth === currentMonth && (
+                <span style={{ padding: '3px 8px', borderRadius: 6, fontSize: 11, fontWeight: 700, background: '#FFFBEB', color: '#B45309' }}>진행중</span>
+              )}
             </div>
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-              <select value={activeMonth} onChange={e => setSelectedMonth(e.target.value)}
-                style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid #F2F4F6', background: 'white', fontSize: 13, color: '#191F28', fontFamily: 'inherit', cursor: 'pointer' }}>
-                {[...data.allMonths].reverse().map(m => (
-                  <option key={m} value={m}>{formatMonth(m)}{m === data.latestMonth ? ' (진행중)' : ''}</option>
-                ))}
-              </select>
-              <button onClick={() => setShowReport(true)}
-                style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 8, background: '#005957', color: 'white', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
-                <FileText style={{ width: 14, height: 14 }} />
-                PDF 리포트
-              </button>
-            </div>
+            <p style={{ fontSize: 13, color: '#8B95A1' }}>{currentMonth} 기준 · {currentStats.monthsActive}개월 거래</p>
           </div>
+          <div style={{ display: 'flex', gap: 10 }}>
+            <Link href={`/content?customer=${encodeURIComponent(customerName)}`} style={{
+              display: 'flex', alignItems: 'center', gap: 6, padding: '9px 16px',
+              borderRadius: 8, background: '#005957', color: 'white',
+              fontSize: 13, fontWeight: 700, textDecoration: 'none',
+            }}>
+              <FileText style={{ width: 14, height: 14 }} /> 콘텐츠 생성
+            </Link>
+            <Link href={`/campaigns?customer=${encodeURIComponent(customerName)}`} style={{
+              display: 'flex', alignItems: 'center', gap: 6, padding: '9px 16px',
+              borderRadius: 8, border: '1px solid #E6F2F2', background: 'white', color: '#005957',
+              fontSize: 13, fontWeight: 700, textDecoration: 'none',
+            }}>
+              <Plus style={{ width: 14, height: 14 }} /> 캠페인 등록
+            </Link>
+          </div>
+        </div>
 
-          {/* KPI 카드 4개 */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 20 }}>
+        {/* KPI 3개 */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, marginTop: 20 }}>
+          {[
+            {
+              label: `${currentMonth} 매출`,
+              value: `${fmt(currentStats.cs)}원`,
+              sub: currentStats.ps > 0 ? `전월 ${fmt(currentStats.ps)}원` : '전월 데이터 없음',
+            },
+            {
+              label: '전월 대비',
+              value: currentStats.ps > 0 ? `${currentStats.growth > 0 ? '+' : ''}${currentStats.growth.toFixed(1)}%` : '-',
+              sub: currentStats.growth > 0 ? '성장' : currentStats.growth < 0 ? '감소' : '변화없음',
+              showIcon: true,
+            },
+            {
+              label: '누적 공급액',
+              value: `${fmt(currentStats.total)}원`,
+              sub: `${currentStats.monthsActive}개월 합산`,
+            },
+          ].map((k, i) => (
+            <div key={i} style={{ background: '#F8F9FA', borderRadius: 12, padding: '16px 18px', border: '1px solid #F2F4F6' }}>
+              <p style={{ fontSize: 11, color: '#8B95A1', fontWeight: 600, marginBottom: 6 }}>{k.label}</p>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <p style={{ fontSize: 20, fontWeight: 800, color: '#191F28' }}>{k.value}</p>
+                {k.showIcon && currentStats.ps > 0 && (
+                  currentStats.growth >= 0
+                    ? <TrendingUp style={{ width: 18, height: 18, color: '#005957' }} />
+                    : <TrendingDown style={{ width: 18, height: 18, color: '#F04452' }} />
+                )}
+              </div>
+              <p style={{ fontSize: 12, color: '#8B95A1', marginTop: 4 }}>{k.sub}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* 2열: 월별 추이 + 품목 구성 */}
+      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 20, marginBottom: 20 }}>
+        <div className="card" style={{ padding: '20px 24px' }}>
+          <p style={{ fontSize: 14, fontWeight: 700, color: '#191F28', marginBottom: 16 }}>
+            월별 매출 추이
+            <span style={{ fontSize: 11, color: '#8B95A1', fontWeight: 400, marginLeft: 8 }}>이달 강조</span>
+          </p>
+          <ResponsiveContainer width="100%" height={200}>
+            <BarChart data={monthlyStats} margin={{ top: 4, right: 8, bottom: 4, left: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#F2F4F6" />
+              <XAxis dataKey="month" tickFormatter={m => m.slice(5)} tick={{ fontSize: 11, fill: '#8B95A1' }} />
+              <YAxis tickFormatter={fmtAxis} tick={{ fontSize: 11, fill: '#8B95A1' }} width={48} />
+              <Tooltip
+                formatter={(v: number) => [`${fmt(v)}원`, '매출']}
+                labelFormatter={l => `${l}`}
+                contentStyle={{ borderRadius: 8, border: '1px solid #F2F4F6', fontSize: 12 }}
+              />
+              <Bar dataKey="sales" radius={[4, 4, 0, 0]}>
+                {monthlyStats.map((m, i) => (
+                  <Cell key={i} fill={m.month === currentMonth ? '#005957' : '#C7E8E8'} />
+                ))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+
+        <div className="card" style={{ padding: '20px 24px' }}>
+          <p style={{ fontSize: 14, fontWeight: 700, color: '#191F28', marginBottom: 14 }}>{currentMonth} 품목 구성</p>
+          {productBreakdown.length === 0 ? (
+            <p style={{ fontSize: 13, color: '#8B95A1', textAlign: 'center', paddingTop: 40 }}>이달 실적 없음</p>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {productBreakdown.map((p, i) => {
+                const pct = totalProductSales > 0 ? (p.value / totalProductSales) * 100 : 0;
+                return (
+                  <div key={i}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                      <span style={{ fontSize: 12, fontWeight: 600, color: '#191F28' }}>{p.name}</span>
+                      <span style={{ fontSize: 12, color: '#8B95A1' }}>{fmt(p.value)}원 ({pct.toFixed(0)}%)</span>
+                    </div>
+                    <div style={{ height: 6, background: '#F2F4F6', borderRadius: 4, overflow: 'hidden' }}>
+                      <div style={{ width: `${pct}%`, height: '100%', background: i === 0 ? '#005957' : '#00B386', borderRadius: 4, transition: 'width 0.5s' }} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* 목표 + 캠페인 통계 */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, marginBottom: 20 }}>
+        <div className="card" style={{ padding: '20px 24px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+            <p style={{ fontSize: 14, fontWeight: 700, color: '#191F28', display: 'flex', alignItems: 'center', gap: 6 }}>
+              <Target style={{ width: 15, height: 15, color: '#005957' }} /> 이달 목표
+            </p>
+            <button onClick={() => setEditingGoal(!editingGoal)} style={{ fontSize: 12, color: '#005957', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600 }}>
+              {editingGoal ? '취소' : '수정'}
+            </button>
+          </div>
+          {editingGoal ? (
+            <div style={{ display: 'flex', gap: 8 }}>
+              <input
+                type="number" value={goalInput} onChange={e => setGoalInput(e.target.value)}
+                placeholder="목표 금액 (만원)"
+                style={{ flex: 1, padding: '8px 12px', borderRadius: 8, border: '1px solid #E6F2F2', fontSize: 13, fontFamily: 'inherit' }}
+              />
+              <button onClick={saveGoal} style={{ padding: '8px 16px', borderRadius: 8, background: '#005957', color: 'white', border: 'none', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>저장</button>
+            </div>
+          ) : goal > 0 ? (
+            <>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                <span style={{ fontSize: 20, fontWeight: 800, color: goalPct >= 100 ? '#005957' : '#191F28' }}>{goalPct}%</span>
+                <span style={{ fontSize: 13, color: '#8B95A1' }}>목표 {fmt(goal)}원</span>
+              </div>
+              <div style={{ height: 10, background: '#F2F4F6', borderRadius: 6, overflow: 'hidden', marginBottom: 8 }}>
+                <div style={{
+                  width: `${Math.min(goalPct, 100)}%`, height: '100%', borderRadius: 6,
+                  background: goalPct >= 100 ? '#005957' : goalPct >= 70 ? '#00B386' : goalPct >= 40 ? '#F59E0B' : '#F04452',
+                  transition: 'width 0.6s',
+                }} />
+              </div>
+              <p style={{ fontSize: 12, color: '#8B95A1' }}>달성 {fmt(currentStats.cs)}원 · 잔여 {fmt(Math.max(0, goal - currentStats.cs))}원</p>
+            </>
+          ) : (
+            <div style={{ textAlign: 'center', paddingTop: 16, paddingBottom: 8 }}>
+              <p style={{ fontSize: 13, color: '#8B95A1', marginBottom: 12 }}>목표가 설정되지 않았습니다.</p>
+              <button onClick={() => setEditingGoal(true)} style={{ padding: '7px 16px', borderRadius: 8, border: '1px dashed #C7E8E8', background: 'white', color: '#005957', fontSize: 13, cursor: 'pointer' }}>
+                + 목표 설정
+              </button>
+            </div>
+          )}
+        </div>
+
+        <div className="card" style={{ padding: '20px 24px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+            <p style={{ fontSize: 14, fontWeight: 700, color: '#191F28', display: 'flex', alignItems: 'center', gap: 6 }}>
+              <Send style={{ width: 15, height: 15, color: '#005957' }} /> 캠페인 요약
+            </p>
+            <Link href={`/campaigns?customer=${encodeURIComponent(customerName)}`} style={{ fontSize: 12, color: '#005957', textDecoration: 'none', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 3 }}>
+              전체 보기 <ChevronRight style={{ width: 12, height: 12 }} />
+            </Link>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
             {[
-              { label: '이번 달 공급액', value: currentSales > 0 ? `${formatCurrency(currentSales)}원` : '-', sub: currentSales > 0 ? formatCurrencyFull(currentSales) : '', accent: false },
-              { label: '전월 대비', value: prevSales > 0 ? formatPercent(growth) : '-', sub: prevSales > 0 ? `전월 ${formatCurrency(prevSales)}원` : '전월 데이터 없음', accent: false, growth: prevSales > 0 ? growth : null },
-              { label: '누적 공급액', value: totalSales > 0 ? `${formatCurrency(totalSales)}원` : '-', sub: totalSales > 0 ? formatCurrencyFull(totalSales) : '', accent: false },
-              { label: 'OEM 대비 절감액', value: savings > 0 ? `${formatCurrency(savings)}원` : '-', sub: savings > 0 ? '누적 기준 약 30% 절감' : '', accent: true },
-            ].map((card, i) => (
-              <div key={i} className="card" style={{ padding: '16px 20px', borderLeft: card.accent ? '3px solid #005957' : undefined }}>
-                <p style={{ fontSize: 12, color: '#8B95A1', marginBottom: 6 }}>{card.label}</p>
-                <p style={{ fontSize: 22, fontWeight: 800, lineHeight: 1.2, color: card.accent ? '#005957' : 'growth' in card && card.growth !== null ? (card.growth! >= 0 ? '#005957' : '#F04452') : '#191F28' }}>
-                  {card.value}
-                </p>
-                {card.sub && <p style={{ fontSize: 11, color: '#8B95A1', marginTop: 4 }}>{card.sub}</p>}
+              { label: '총 발송', value: campaignStats.total, color: '#8B95A1' },
+              { label: '미팅 전환', value: campaignStats.meeting, color: '#F59E0B' },
+              { label: '반응', value: campaignStats.responded, color: '#3B82F6' },
+              { label: '계약 완료', value: campaignStats.closed, color: '#005957' },
+            ].map((s, i) => (
+              <div key={i} style={{ background: '#F8F9FA', borderRadius: 10, padding: '12px 14px', border: '1px solid #F2F4F6' }}>
+                <p style={{ fontSize: 11, color: '#8B95A1', fontWeight: 600, marginBottom: 4 }}>{s.label}</p>
+                <p style={{ fontSize: 22, fontWeight: 800, color: s.color }}>{s.value}</p>
               </div>
             ))}
           </div>
+          {campaignStats.total > 0 && (
+            <p style={{ fontSize: 12, color: '#8B95A1', marginTop: 12, textAlign: 'center' }}>
+              미팅 전환율 <strong style={{ color: '#191F28' }}>{campaignStats.rate}%</strong>
+            </p>
+          )}
+        </div>
+      </div>
 
-          {/* 월별 차트 + 목표 설정 */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: 16, marginBottom: 16 }}>
-
-            {/* 월별 추이 바차트 */}
-            <div className="card">
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-                <div>
-                  <h3 style={{ fontSize: 15, fontWeight: 700, color: '#191F28' }}>월별 공급 추이</h3>
-                  <p style={{ fontSize: 12, color: '#8B95A1', marginTop: 2 }}>막대 클릭 시 해당 월로 이동</p>
-                </div>
-              </div>
-              <ResponsiveContainer width="100%" height={220}>
-                <BarChart
-                  data={monthlyData}
-                  margin={{ top: 4, right: 8, bottom: 4, left: 0 }}
-                  onClick={e => { if (e?.activeLabel) setSelectedMonth(e.activeLabel as string); }}
-                >
-                  <CartesianGrid strokeDasharray="3 3" stroke="#F2F4F6" vertical={false} />
-                  <XAxis
-                    dataKey="month" tickFormatter={formatAxisMonth}
-                    tick={{ fontSize: 11, fill: '#8B95A1' }} axisLine={false} tickLine={false}
-                    interval={Math.max(0, Math.ceil(monthlyData.length / 12) - 1)}
-                  />
-                  <YAxis
-                    tickFormatter={v => formatCurrency(v as number)}
-                    tick={{ fontSize: 11, fill: '#8B95A1' }} axisLine={false} tickLine={false} width={52}
-                  />
-                  <Tooltip
-                    formatter={(v: number) => [formatCurrencyFull(v), '공급액']}
-                    labelFormatter={(l: string) => formatMonth(l)}
-                    contentStyle={{ borderRadius: 8, border: '1px solid #F2F4F6', fontSize: 12 }}
-                  />
-                  <Bar dataKey="sales" radius={[4, 4, 0, 0]} cursor="pointer">
-                    {monthlyData.map(d => (
-                      <Cell key={d.month} fill={d.month === activeMonth ? '#005957' : '#E6F2F2'} />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-
-            {/* 목표 설정 (Ch8) */}
-            <div className="card">
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
-                <div style={{ width: 28, height: 28, borderRadius: 8, background: '#E6F2F2', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <Target style={{ width: 14, height: 14, color: '#005957' }} />
-                </div>
-                <h3 style={{ fontSize: 15, fontWeight: 700, color: '#191F28' }}>월 목표 설정</h3>
-              </div>
-
-              <p style={{ fontSize: 12, color: '#8B95A1', marginBottom: 8 }}>이번 달 목표 금액 (원)</p>
-              <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
-                <input
-                  type="text"
-                  value={goalInput}
-                  onChange={e => {
-                    const raw = e.target.value.replace(/[^0-9]/g, '');
-                    setGoalInput(raw ? parseInt(raw).toLocaleString() : '');
-                  }}
-                  placeholder="예: 50,000,000"
-                  style={{ flex: 1, padding: '9px 12px', border: '1px solid #F2F4F6', borderRadius: 8, fontSize: 13, color: '#191F28', fontFamily: 'inherit', outline: 'none' }}
-                />
-                <button onClick={saveGoal}
-                  style={{ padding: '9px 14px', background: '#005957', color: 'white', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>
-                  저장
-                </button>
-              </div>
-
-              {goal > 0 ? (
-                <>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                    <span style={{ fontSize: 12, color: '#8B95A1' }}>목표 달성률</span>
-                    <span style={{ fontSize: 20, fontWeight: 800, color: achColor }}>{Math.min(achievementRate, 999).toFixed(1)}%</span>
-                  </div>
-                  <div style={{ height: 12, background: '#F2F4F6', borderRadius: 6, overflow: 'hidden', marginBottom: 14 }}>
-                    <div style={{ height: 12, borderRadius: 6, transition: 'width 0.5s ease', width: `${Math.min(achievementRate, 100)}%`, background: achColor }} />
-                  </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 12 }}>
-                    {[
-                      { label: '목표', value: `${formatCurrency(goal)}원` },
-                      { label: '달성', value: currentSales > 0 ? `${formatCurrency(currentSales)}원` : '-' },
-                    ].map(item => (
-                      <div key={item.label} style={{ background: '#F8F9FA', borderRadius: 8, padding: '10px 12px' }}>
-                        <p style={{ fontSize: 10, color: '#8B95A1' }}>{item.label}</p>
-                        <p style={{ fontSize: 13, fontWeight: 700, color: '#191F28' }}>{item.value}</p>
-                      </div>
-                    ))}
-                  </div>
-                  {achievementRate >= 100 && (
-                    <div style={{ padding: '10px 12px', background: '#E6F2F2', borderRadius: 8, fontSize: 12, color: '#005957', fontWeight: 600, textAlign: 'center' }}>
-                      🎉 목표 달성!
-                    </div>
-                  )}
-                  {achievementRate > 0 && achievementRate < 70 && (
-                    <div style={{ padding: '10px 12px', background: '#FFF8F0', borderRadius: 8, fontSize: 12, color: '#FF9500', fontWeight: 600 }}>
-                      목표까지 {formatCurrency(goal - currentSales)}원 남음
-                    </div>
-                  )}
-                  {currentSales === 0 && goal > 0 && (
-                    <div style={{ padding: '10px 12px', background: '#FFF0F1', borderRadius: 8, fontSize: 12, color: '#F04452', fontWeight: 600 }}>
-                      이번 달 공급 실적 없음
-                    </div>
-                  )}
-                </>
-              ) : (
-                <div style={{ padding: '24px', background: '#F8F9FA', borderRadius: 8, textAlign: 'center' }}>
-                  <p style={{ fontSize: 12, color: '#8B95A1' }}>목표를 설정하면 달성률을 추적할 수 있습니다</p>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* CRM 노트 */}
-          <div className="card" style={{ marginBottom: 16 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
-              <div style={{ width: 28, height: 28, borderRadius: 8, background: '#E6F2F2', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <BookOpen style={{ width: 14, height: 14, color: '#005957' }} />
-              </div>
-              <h3 style={{ fontSize: 15, fontWeight: 700, color: '#191F28' }}>고객사 관리 노트</h3>
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 2fr', gap: 16, alignItems: 'start' }}>
-              <div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 6 }}>
-                  <Phone style={{ width: 12, height: 12, color: '#8B95A1' }} />
-                  <p style={{ fontSize: 12, color: '#8B95A1', fontWeight: 600 }}>마지막 연락일</p>
-                </div>
-                <input type="date" value={crm.lastContact}
-                  onChange={e => setCrm(prev => ({ ...prev, lastContact: e.target.value }))}
-                  style={{ width: '100%', padding: '8px 10px', border: '1px solid #F2F4F6', borderRadius: 8, fontSize: 13, color: '#191F28', fontFamily: 'inherit', outline: 'none' }}
-                />
-              </div>
-              <div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 6 }}>
-                  <Calendar style={{ width: 12, height: 12, color: '#8B95A1' }} />
-                  <p style={{ fontSize: 12, color: '#8B95A1', fontWeight: 600 }}>다음 미팅 예정일</p>
-                </div>
-                <input type="date" value={crm.nextMeeting}
-                  onChange={e => setCrm(prev => ({ ...prev, nextMeeting: e.target.value }))}
-                  style={{ width: '100%', padding: '8px 10px', border: '1px solid #F2F4F6', borderRadius: 8, fontSize: 13, color: '#191F28', fontFamily: 'inherit', outline: 'none' }}
-                />
-              </div>
-              <div>
-                <p style={{ fontSize: 12, color: '#8B95A1', fontWeight: 600, marginBottom: 6 }}>메모</p>
-                <textarea value={crm.memo} rows={3}
-                  onChange={e => setCrm(prev => ({ ...prev, memo: e.target.value }))}
-                  placeholder="미팅 내용, 특이사항, 다음 할 일 등"
-                  style={{ width: '100%', padding: '8px 10px', border: '1px solid #F2F4F6', borderRadius: 8, fontSize: 13, color: '#191F28', fontFamily: 'inherit', outline: 'none', resize: 'vertical', lineHeight: 1.6 }}
-                />
-              </div>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 12 }}>
-              <button onClick={saveCRM}
-                style={{ padding: '8px 20px', background: crmSaved ? '#005957' : '#191F28', color: 'white', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer', transition: 'background 0.2s' }}>
-                {crmSaved ? '✓ 저장됨' : '저장'}
+      {/* 캠페인 히스토리 */}
+      <div className="card" style={{ padding: '20px 24px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+          <p style={{ fontSize: 14, fontWeight: 700, color: '#191F28' }}>캠페인 히스토리</p>
+          <div style={{ display: 'flex', gap: 6 }}>
+            {['all', 'sent', 'responded', 'meeting', 'proposal', 'closed'].map(f => (
+              <button key={f} onClick={() => { setCampaignFilter(f); setShowAllCampaigns(false); }} style={{
+                padding: '4px 10px', borderRadius: 16, fontSize: 11, fontWeight: 600, cursor: 'pointer', border: 'none',
+                background: campaignFilter === f ? '#005957' : '#F2F4F6',
+                color: campaignFilter === f ? 'white' : '#8B95A1',
+              }}>
+                {f === 'all' ? '전체' : OUTCOME_LABEL[f]}
               </button>
-            </div>
-          </div>
-
-          {/* 하단 2열: 주요 품목 + 부품 유형 */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-
-            {/* 주요 품목 Top 10 */}
-            <div className="card">
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-                <h3 style={{ fontSize: 15, fontWeight: 700, color: '#191F28' }}>주요 공급 품목 Top 10</h3>
-                <span style={{ fontSize: 12, color: '#8B95A1' }}>{formatMonth(activeMonth)} 기준</span>
-              </div>
-              {topItems.length === 0 ? (
-                <p style={{ fontSize: 13, color: '#8B95A1', textAlign: 'center', padding: '40px 0' }}>해당 월 데이터 없음</p>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                  {topItems.map((item, i) => {
-                    const pct = parseFloat(item.percent);
-                    return (
-                      <div key={item.name}>
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 0 }}>
-                            <div style={{ width: 20, height: 20, borderRadius: '50%', background: i === 0 ? '#005957' : '#F2F4F6', color: i === 0 ? 'white' : '#8B95A1', fontSize: 10, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                              {i + 1}
-                            </div>
-                            <span style={{ fontSize: 13, color: '#191F28', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.name}</span>
-                          </div>
-                          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexShrink: 0, marginLeft: 8 }}>
-                            <span style={{ fontSize: 12, color: '#191F28', fontWeight: 600 }}>{formatCurrencyFull(item.value)}</span>
-                            <span style={{ fontSize: 11, color: '#8B95A1', width: 40, textAlign: 'right' }}>{item.percent}</span>
-                          </div>
-                        </div>
-                        <div style={{ height: 5, background: '#F2F4F6', borderRadius: 9999 }}>
-                          <div style={{ height: 5, width: `${Math.min(pct, 100)}%`, background: i === 0 ? '#005957' : i < 3 ? '#00B386' : '#E6F2F2', borderRadius: 9999 }} />
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-
-            {/* 부품 유형별 비중 */}
-            <div className="card">
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-                <h3 style={{ fontSize: 15, fontWeight: 700, color: '#191F28' }}>부품 유형별 비중</h3>
-                <span style={{ fontSize: 12, color: '#8B95A1' }}>{formatMonth(activeMonth)} 기준</span>
-              </div>
-              {partTypeData.length === 0 ? (
-                <p style={{ fontSize: 13, color: '#8B95A1', textAlign: 'center', padding: '40px 0' }}>해당 월 데이터 없음</p>
-              ) : (
-                <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
-                  <div style={{ flexShrink: 0 }}>
-                    <ResponsiveContainer width={160} height={160}>
-                      <PieChart>
-                        <Pie data={partTypeData} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={40} outerRadius={72}>
-                          {partTypeData.map((_, idx) => <Cell key={idx} fill={PIE_COLORS[idx % PIE_COLORS.length]} />)}
-                        </Pie>
-                        <Tooltip formatter={(v: number) => [formatCurrencyFull(v), '공급액']} contentStyle={{ borderRadius: 8, fontSize: 12 }} />
-                      </PieChart>
-                    </ResponsiveContainer>
-                  </div>
-                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 10 }}>
-                    {partTypeData.slice(0, 7).map((pt, idx) => {
-                      const pct = ptTotal > 0 ? (pt.value / ptTotal * 100) : 0;
-                      return (
-                        <div key={pt.name}>
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 3 }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                              <div style={{ width: 8, height: 8, borderRadius: 2, background: PIE_COLORS[idx % PIE_COLORS.length], flexShrink: 0 }} />
-                              <span style={{ fontSize: 12, color: '#374151', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 120 }}>{pt.name}</span>
-                            </div>
-                            <span style={{ fontSize: 12, fontWeight: 700, color: '#191F28' }}>{pct.toFixed(1)}%</span>
-                          </div>
-                          <div style={{ height: 4, background: '#F2F4F6', borderRadius: 9999 }}>
-                            <div style={{ height: 4, width: `${Math.min(pct, 100)}%`, background: PIE_COLORS[idx % PIE_COLORS.length], borderRadius: 9999 }} />
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-            </div>
+            ))}
           </div>
         </div>
-      </main>
 
-      {showReport && (
-        <CustomerReportModal
-          data={data}
-          defaultCustomer={name}
-          defaultMonth={activeMonth}
-          onClose={() => setShowReport(false)}
-        />
-      )}
-    </>
+        {filteredCampaigns.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '32px 0', color: '#8B95A1', fontSize: 13 }}>
+            {campaigns.length === 0 ? '등록된 캠페인이 없습니다.' : '해당 필터의 캠페인이 없습니다.'}
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column' }}>
+            {filteredCampaigns.map((c, i) => (
+              <div key={c.id} style={{
+                display: 'flex', alignItems: 'flex-start', gap: 14,
+                padding: '12px 0',
+                borderBottom: i < filteredCampaigns.length - 1 ? '1px solid #F2F4F6' : 'none',
+              }}>
+                <div style={{ paddingTop: 4 }}>
+                  <div style={{ width: 10, height: 10, borderRadius: '50%', background: OUTCOME_COLOR[c.outcome] }} />
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 3 }}>
+                    <span style={{ fontSize: 12, color: '#8B95A1' }}>{c.date}</span>
+                    <span style={{ padding: '2px 7px', borderRadius: 10, fontSize: 11, fontWeight: 700, background: '#F2F4F6', color: '#8B95A1' }}>
+                      {CHANNEL_LABEL[c.channel] ?? c.channel}
+                    </span>
+                    <span style={{ padding: '2px 7px', borderRadius: 10, fontSize: 11, fontWeight: 700, background: `${OUTCOME_COLOR[c.outcome]}22`, color: OUTCOME_COLOR[c.outcome] }}>
+                      {OUTCOME_LABEL[c.outcome] ?? c.outcome}
+                    </span>
+                  </div>
+                  <p style={{ fontSize: 13, color: '#191F28', marginBottom: c.note ? 4 : 0 }}>{c.contentSummary || '(내용 없음)'}</p>
+                  {c.note && <p style={{ fontSize: 12, color: '#8B95A1' }}>{c.note}</p>}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {campaigns.length > 6 && (
+          <button onClick={() => setShowAllCampaigns(v => !v)} style={{
+            width: '100%', marginTop: 12, padding: '8px 0', borderRadius: 8,
+            border: '1px solid #F2F4F6', background: 'white', color: '#8B95A1', fontSize: 13, cursor: 'pointer',
+          }}>
+            {showAllCampaigns ? '접기' : `전체 ${campaigns.length}건 보기`}
+          </button>
+        )}
+      </div>
+    </main>
   );
 }

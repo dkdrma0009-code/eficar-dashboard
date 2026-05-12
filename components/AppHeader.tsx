@@ -4,17 +4,20 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useDashboardData } from '@/lib/DataContext';
 
 const NAV = [
-  { href: '/',           label: '대시보드' },
-  { href: '/goals',      label: '목표 관리' },
-  { href: '/content',    label: '콘텐츠 생성' },
-  { href: '/cardnews',   label: '카드뉴스' },
-  { href: '/library',    label: '라이브러리' },
-  { href: '/calendar',   label: '캘린더' },
-  { href: '/campaigns',  label: '캠페인' },
-  { href: '/ai-coach',   label: '🤖 AI 코치' },
-  { href: '/report',     label: '보고서' },
-  { href: '/calculator', label: '계산기' },
-  { href: '/compare',    label: '비교' },
+  { href: '/',                    label: '대시보드' },
+  { href: '/goals',               label: '목표 관리' },
+  { href: '/customers/sk',        label: '🔵 SK렌터카' },
+  { href: '/customers/lotte',     label: '🟠 롯데렌탈' },
+  { href: '/content',             label: '콘텐츠 생성' },
+  { href: '/cardnews',            label: '카드뉴스' },
+  { href: '/library',             label: '라이브러리' },
+  { href: '/calendar',            label: '캘린더' },
+  { href: '/campaigns',           label: '캠페인' },
+  { href: '/ai-coach',            label: '🤖 AI 코치' },
+  { href: '/proposal',            label: '📋 AI 제안서' },
+  { href: '/report',              label: '보고서' },
+  { href: '/calculator',          label: '계산기' },
+  { href: '/compare',             label: '비교' },
 ];
 
 export function EficarLogo() {

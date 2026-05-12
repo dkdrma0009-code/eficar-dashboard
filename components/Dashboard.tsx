@@ -87,6 +87,17 @@ export default function Dashboard({ data }: Props) {
         </div>
       </div>
 
+      {/* 진행 중인 달 MTD 안내 */}
+      {viewData.isLatestMonth && viewData.mtdInfo && (
+        <div style={{ padding: '10px 16px', background: '#EFF6FF', border: '1px solid #BFDBFE', borderRadius: 10, fontSize: 13, color: '#1E40AF', display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: 16 }}>📅</span>
+          <span>
+            <strong>{viewData.selectedMonth.slice(5)}월 {viewData.mtdInfo.todayDay}일 진행 중</strong> — 일평균 매출 기준으로 전월과 비교합니다.
+            현재 페이스 유지 시 예상 월매출 <strong style={{ color: '#005957' }}>약 {Math.round(viewData.mtdInfo.projectedSales / 10000).toLocaleString()}만원</strong>.
+          </span>
+        </div>
+      )}
+
       {/* 이탈 위험 배너 */}
       <WarningBanner customers={viewData.atRiskCustomers} onSelectCustomer={setSelectedCustomer} />
 

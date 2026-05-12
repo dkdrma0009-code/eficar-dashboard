@@ -43,6 +43,14 @@ export interface AtRiskCustomer {
   prevSales: number;
 }
 
+export interface MtdInfo {
+  todayDay: number;       // 오늘 일자 (진행 중인 달)
+  daysInMonth: number;    // 해당 월 총 일수
+  dailyRate: number;      // 이달 일평균 매출
+  projectedSales: number; // 일평균 기준 예상 월매출
+  prevDailyRate: number;  // 전월 일평균 매출
+}
+
 export interface ViewData {
   selectedMonth: string;
   prevMonth: string;
@@ -59,6 +67,7 @@ export interface ViewData {
   mvpCustomer: CustomerStats | null;
   actionCustomer: CustomerStats | null;
   opportunityCustomer: { name: string; missingCategoryCount: number } | null;
+  mtdInfo?: MtdInfo; // 진행 중인 달에만 설정
 }
 
 export interface DashboardData {

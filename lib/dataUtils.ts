@@ -31,6 +31,17 @@ function getPrevMonth(month: string): string {
   return `${y}-${String(m - 1).padStart(2, '0')}`;
 }
 
+function getDaysInMonth(ym: string): number {
+  const [y, m] = ym.split('-').map(Number);
+  return new Date(y, m, 0).getDate();
+}
+
+function getTodayDayForMonth(ym: string): number {
+  const today = new Date();
+  const todayYM = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+  return todayYM === ym ? today.getDate() : getDaysInMonth(ym);
+}
+
 export function categorizeProduct(itemName: string): string {
   const n = itemName;
   if (n.includes('헤드램프') || n.includes('헤드라이트') || n.includes('전조등')) return '헤드램프';
@@ -100,18 +111,44 @@ export function computeViewData(
 
   const totalCurrentSales = curRecs.reduce((s, r) => s + r.amount, 0);
   const totalPrevSales = prevRecs.reduce((s, r) => s + r.amount, 0);
-  const growthRate =
-    totalPrevSales === 0 ? 0 : ((totalCurrentSales - totalPrevSales) / totalPrevSales) * 100;
+
+  // MTD: 진행 중인 달은 일평균 기준으로 성장률 계산
+  let mtdInfo: import('./types').MtdInfo | undefined;
+  let growthRate: number;
+
+  if (isLatestMonth) {
+    const todayDay = getTodayDayForMonth(selectedMonth);
+    const daysInMonth = getDaysInMonth(selectedMonth);
+    const daysInPrevMonth = getDaysInMonth(prevMonth);
+    const dailyRate = todayDay > 0 ? Math.round(totalCurrentSales / todayDay) : 0;
+    const prevDailyRate = daysInPrevMonth > 0 ? totalPrevSales / daysInPrevMonth : 0;
+    const projectedSales = Math.round(dailyRate * daysInMonth);
+    growthRate = prevDailyRate > 0 ? ((dailyRate - prevDailyRate) / prevDailyRate) * 100 : 0;
+    mtdInfo = { todayDay, daysInMonth, dailyRate, projectedSales, prevDailyRate: Math.round(prevDailyRate) };
+  } else {
+    growthRate = totalPrevSales === 0 ? 0 : ((totalCurrentSales - totalPrevSales) / totalPrevSales) * 100;
+  }
 
   const activeCustomers = new Set(curRecs.map(r => r.service)).size;
   const transactionCount = curRecs.length;
+
+  // 고객사별 성장률도 isLatestMonth이면 일평균 기준
+  const todayDay = mtdInfo?.todayDay ?? 1;
+  const daysInPrevMonth = getDaysInMonth(prevMonth);
 
   const customerStats: CustomerStats[] = customers.map(name => {
     const cur = curRecs.filter(r => r.service === name);
     const prev = prevRecs.filter(r => r.service === name);
     const cs = cur.reduce((s, r) => s + r.amount, 0);
     const ps = prev.reduce((s, r) => s + r.amount, 0);
-    const growth = ps === 0 ? (cs > 0 ? 100 : 0) : ((cs - ps) / ps) * 100;
+    let growth: number;
+    if (isLatestMonth) {
+      const cDaily = todayDay > 0 ? cs / todayDay : 0;
+      const pDaily = daysInPrevMonth > 0 ? ps / daysInPrevMonth : 0;
+      growth = pDaily > 0 ? ((cDaily - pDaily) / pDaily) * 100 : (cs > 0 ? 100 : 0);
+    } else {
+      growth = ps === 0 ? (cs > 0 ? 100 : 0) : ((cs - ps) / ps) * 100;
+    }
     return {
       name,
       grade: getCustomerGrade(cs, ps, growth),
@@ -187,7 +224,7 @@ export function computeViewData(
     totalCurrentSales, totalPrevSales, growthRate,
     transactionCount, activeCustomers,
     customerStats, productData, atRiskCustomers, insights, isLatestMonth,
-    mvpCustomer, actionCustomer, opportunityCustomer,
+    mvpCustomer, actionCustomer, opportunityCustomer, mtdInfo,
   };
 }
 

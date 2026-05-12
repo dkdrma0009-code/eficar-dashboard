@@ -63,21 +63,37 @@ function KPICard({ label, rawValue, displayFn, sub, growth, icon: Icon, accentCo
 }
 
 export default function KPICards({ viewData }: { viewData: ViewData }) {
-  const { totalCurrentSales, totalPrevSales, growthRate, transactionCount, activeCustomers, selectedMonth, prevMonth, isLatestMonth } = viewData;
+  const { totalCurrentSales, totalPrevSales, growthRate, transactionCount, activeCustomers, selectedMonth, prevMonth, isLatestMonth, mtdInfo } = viewData;
+
+  const salesLabel = isLatestMonth && mtdInfo
+    ? `${selectedMonth.slice(5)}월 ${mtdInfo.todayDay}일 기준`
+    : '이번 달 매출';
+
+  const salesSub = isLatestMonth && mtdInfo
+    ? `예상 월매출 ${formatCurrency(mtdInfo.projectedSales)}원`
+    : `전월 ${formatCurrency(totalPrevSales)}원`;
+
+  const growthLabel = isLatestMonth && mtdInfo
+    ? '일평균 기준 전월 대비'
+    : '전월 대비 증감률';
+
+  const growthSub = isLatestMonth && mtdInfo
+    ? `일평균 ${formatCurrency(mtdInfo.dailyRate)}원 vs 전월 ${formatCurrency(mtdInfo.prevDailyRate)}원`
+    : `${prevMonth} → ${selectedMonth}`;
 
   return (
     <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(4,1fr)' }}>
       <KPICard
-        label="이번 달 매출" rawValue={totalCurrentSales}
+        label={salesLabel} rawValue={totalCurrentSales}
         displayFn={v => `${formatCurrency(Math.round(v))}원`}
-        sub={`전월 ${formatCurrency(totalPrevSales)}원`}
+        sub={salesSub}
         growth={growthRate}
         icon={BarChart2} accentColor="#005957"
       />
       <KPICard
-        label="전월 대비 증감률" rawValue={Math.abs(growthRate)}
+        label={growthLabel} rawValue={Math.abs(growthRate)}
         displayFn={v => `${growthRate >= 0 ? '+' : '-'}${v.toFixed(1)}%`}
-        sub={isLatestMonth ? `${prevMonth} 전체 vs ${selectedMonth} 진행중` : `${prevMonth} → ${selectedMonth}`}
+        sub={growthSub}
         growth={growthRate}
         icon={Activity} accentColor={growthRate >= 0 ? '#00B386' : '#F04452'}
       />

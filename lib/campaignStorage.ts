@@ -14,6 +14,7 @@ export interface CampaignRecord {
   outcome: CampaignOutcome;
   note: string;
   createdAt: string;
+  scheduledDate?: string; // 'YYYY-MM-DD' — 예약 발송일
 }
 
 function load(): CampaignRecord[] {

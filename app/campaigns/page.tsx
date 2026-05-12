@@ -1,7 +1,8 @@
 'use client';
 
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { Plus, X, Check, Send, Upload, AlertCircle, Bell, Mail } from 'lucide-react';
+import { useSearchParams } from 'next/navigation';
+import { Plus, X, Check, Send, Upload, AlertCircle, Bell, Mail, Clock } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { getCampaigns, addCampaign, updateCampaign, deleteCampaign, isDuplicateCampaign, type CampaignRecord, type CampaignChannel, type CampaignOutcome } from '@/lib/campaignStorage';
 import { useDashboardData } from '@/lib/DataContext';
@@ -23,7 +24,7 @@ const OUTCOMES: { value: CampaignOutcome; label: string; color: string; bg: stri
 ];
 
 const EMPTY: Omit<CampaignRecord, 'id' | 'createdAt'> = {
-  date: '', customer: '', channel: 'kakao', contentSummary: '', outcome: 'sent', note: '',
+  date: '', customer: '', channel: 'kakao', contentSummary: '', outcome: 'sent', note: '', scheduledDate: '',
 };
 
 interface ImportRow {
@@ -59,7 +60,13 @@ export default function CampaignsPage() {
   const [emailSending, setEmailSending] = useState(false);
   const [emailResult, setEmailResult] = useState('');
 
-  useEffect(() => { setRecords(getCampaigns()); }, []);
+  const searchParams = useSearchParams();
+
+  useEffect(() => {
+    setRecords(getCampaigns());
+    const c = searchParams.get('customer');
+    if (c) { setForm(prev => ({ ...prev, customer: c })); setShowForm(true); }
+  }, []);
 
   const [viewMode, setViewMode] = useState<'grouped' | 'list'>('grouped');
   const [expandedGroup, setExpandedGroup] = useState<string | null>(null);
@@ -141,6 +148,11 @@ export default function CampaignsPage() {
       }))
       .sort((a, b) => a.date.localeCompare(b.date));
   }, [records]);
+
+  const scheduledToday = useMemo(() =>
+    records.filter(r => r.scheduledDate === today),
+    [records, today]
+  );
 
   function sendBrowserNotification() {
     if (!('Notification' in window)) { alert('이 브라우저는 알림을 지원하지 않습니다.'); return; }
@@ -338,6 +350,20 @@ export default function CampaignsPage() {
                 style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 12px', borderRadius: 8, border: 'none', background: '#D97706', color: 'white', fontSize: 12, fontWeight: 700, cursor: emailSending ? 'default' : 'pointer', opacity: emailSending ? 0.7 : 1 }}>
                 <Mail style={{ width: 12, height: 12 }} /> {emailSending ? '발송 중...' : '이메일 알림'}
               </button>
+            </div>
+          </div>
+        )}
+
+        {/* 오늘 예약 발송 배너 */}
+        {scheduledToday.length > 0 && (
+          <div style={{ marginBottom: 16, padding: '14px 18px', background: '#EFF6FF', border: '1px solid #BFDBFE', borderRadius: 12, display: 'flex', alignItems: 'center', gap: 12 }}>
+            <Clock style={{ width: 18, height: 18, color: '#2563EB', flexShrink: 0 }} />
+            <div style={{ flex: 1 }}>
+              <p style={{ fontSize: 14, fontWeight: 700, color: '#1E40AF', margin: 0 }}>오늘 예약 발송 {scheduledToday.length}건</p>
+              <p style={{ fontSize: 12, color: '#3B82F6', margin: '2px 0 0' }}>
+                {scheduledToday.map(r => `${r.customer} · ${r.contentSummary || r.channel}`).slice(0, 3).join(' / ')}
+                {scheduledToday.length > 3 ? ` 외 ${scheduledToday.length - 3}건` : ''}
+              </p>
             </div>
           </div>
         )}
@@ -588,6 +614,18 @@ export default function CampaignsPage() {
                 <label style={{ fontSize: 12, fontWeight: 600, color: '#8B95A1', display: 'block', marginBottom: 5 }}>메모</label>
                 <textarea value={form.note} rows={2} onChange={e => setForm(f => ({ ...f, note: e.target.value }))}
                   style={{ width: '100%', padding: '8px 12px', border: '1px solid #F2F4F6', borderRadius: 8, fontSize: 13, color: '#191F28', fontFamily: 'inherit', resize: 'vertical' }} />
+              </div>
+              {/* 예약 발송 */}
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 600, color: '#8B95A1', display: 'flex', alignItems: 'center', gap: 5, marginBottom: 5 }}>
+                  <Clock style={{ width: 12, height: 12 }} /> 예약 발송일 <span style={{ fontSize: 11, fontWeight: 400 }}>(선택 — 해당 날짜에 알림)</span>
+                </label>
+                <input type="date" value={form.scheduledDate ?? ''} min={today}
+                  onChange={e => setForm(f => ({ ...f, scheduledDate: e.target.value }))}
+                  style={{ width: '100%', padding: '8px 12px', border: `1px solid ${form.scheduledDate ? '#005957' : '#F2F4F6'}`, borderRadius: 8, fontSize: 13, color: '#191F28', fontFamily: 'inherit' }} />
+                {form.scheduledDate && (
+                  <p style={{ fontSize: 11, color: '#005957', marginTop: 4 }}>📅 {form.scheduledDate} 에 발송 알림이 표시됩니다.</p>
+                )}
               </div>
             </div>
             <div style={{ display: 'flex', gap: 8, marginTop: 20 }}>
