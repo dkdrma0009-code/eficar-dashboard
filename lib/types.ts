@@ -7,8 +7,11 @@ export interface SalesRecord {
   amount: number;
 }
 
+export type CustomerGrade = 'vip' | 'normal' | 'warning' | 'danger' | 'new';
+
 export interface CustomerStats {
   name: string;
+  grade: CustomerGrade;
   currentMonthSales: number;
   prevMonthSales: number;
   growthRate: number;
@@ -52,18 +55,17 @@ export interface ViewData {
   productData: ProductData[];
   atRiskCustomers: AtRiskCustomer[];
   insights: string[];
-  /** 선택된 월이 데이터상 가장 최근(미완성) 월인지 여부 */
   isLatestMonth: boolean;
+  mvpCustomer: CustomerStats | null;
+  actionCustomer: CustomerStats | null;
+  opportunityCustomer: { name: string; missingCategoryCount: number } | null;
 }
 
-/** 파일 업로드 후 한 번만 계산되는 정적 데이터 */
 export interface DashboardData {
   records: SalesRecord[];
   customers: string[];
   allMonths: string[];
-  /** 마지막으로 완성된 월 (기본 선택 월) */
   currentMonth: string;
-  /** 데이터상 가장 최근 월 (진행중일 수 있음) */
   latestMonth: string;
   monthlyData: MonthlyData[];
 }

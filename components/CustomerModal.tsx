@@ -1,37 +1,49 @@
 'use client';
 
-import { useEffect } from 'react';
-import { X, TrendingUp, TrendingDown } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { X, FileText } from 'lucide-react';
 import {
-  AreaChart, Area, XAxis, YAxis, CartesianGrid,
-  Tooltip, ResponsiveContainer, BarChart, Bar, Cell,
+  BarChart, Bar, Cell, XAxis, YAxis, CartesianGrid, Tooltip,
+  ResponsiveContainer, PieChart, Pie,
 } from 'recharts';
 import type { DashboardData } from '@/lib/types';
 import {
   getCustomerMonthlyData, getCustomerTopItems, getCustomerPartTypeData,
   formatCurrency, formatCurrencyFull, formatPercent, formatAxisMonth, formatMonth,
-  CHART_COLORS, PIE_COLORS,
+  CHART_COLORS, PIE_COLORS, GRADE_CONFIG,
 } from '@/lib/dataUtils';
+import { computeViewData } from '@/lib/dataUtils';
 
 interface Props {
   customerName: string;
   data: DashboardData;
   selectedMonth: string;
   onClose: () => void;
+  onReport?: () => void;
 }
 
-function SalesAreaTooltip({ active, payload, label }: any) {
+type Tab = 'trend' | 'items' | 'parttype';
+
+const TABS: { key: Tab; label: string }[] = [
+  { key: 'trend',    label: '월별 매출' },
+  { key: 'items',    label: '품목 Top 5' },
+  { key: 'parttype', label: '부품 유형' },
+];
+
+const DonutTooltip = ({ active, payload }: any) => {
   if (!active || !payload?.length) return null;
+  const p = payload[0];
   return (
-    <div className="bg-white border border-gray-200 rounded-xl shadow-lg p-3">
-      <p className="text-xs text-gray-500 mb-1">{label}</p>
-      <p className="text-sm font-bold text-gray-800">{formatCurrencyFull(payload[0].value)}</p>
+    <div className="card" style={{ padding: '8px 12px', boxShadow: '0 4px 16px rgba(0,0,0,0.12)' }}>
+      <p style={{ fontSize: 12, color: '#8B95A1', marginBottom: 2 }}>{p.name}</p>
+      <p style={{ fontSize: 13, fontWeight: 700, color: '#191F28' }}>{formatCurrencyFull(p.value)}</p>
     </div>
   );
-}
+};
 
-export default function CustomerModal({ customerName, data, selectedMonth, onClose }: Props) {
-  const { records, allMonths } = data;
+export default function CustomerModal({ customerName, data, selectedMonth, onClose, onReport }: Props) {
+  const [tab, setTab] = useState<Tab>('trend');
+  const { records, allMonths, customers } = data;
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
@@ -47,271 +59,201 @@ export default function CustomerModal({ customerName, data, selectedMonth, onClo
   const topItems = getCustomerTopItems(records, customerName, selectedMonth, 5);
   const partTypeData = getCustomerPartTypeData(records, customerName, selectedMonth);
 
-  const chartData = monthlyData.map(d => ({ ...d, month: formatAxisMonth(d.month) }));
   const selectedLabel = formatAxisMonth(selectedMonth);
+  const chartData = monthlyData.map(d => ({ ...d, month: formatAxisMonth(d.month) }));
 
-  const currentData = monthlyData.find(d => d.month === selectedMonth);
-  const prevMonthKey = (() => {
-    const idx = allMonths.indexOf(selectedMonth);
-    return idx > 0 ? allMonths[idx - 1] : '';
-  })();
-  const prevData = monthlyData.find(d => d.month === prevMonthKey);
-  const currentSales = currentData?.sales ?? 0;
-  const prevSales = prevData?.sales ?? 0;
+  const currentSales = monthlyData.find(d => d.month === selectedMonth)?.sales ?? 0;
+  const prevMonthKey = (() => { const idx = allMonths.indexOf(selectedMonth); return idx > 0 ? allMonths[idx - 1] : ''; })();
+  const prevSales = monthlyData.find(d => d.month === prevMonthKey)?.sales ?? 0;
   const growth = prevSales === 0 ? 0 : ((currentSales - prevSales) / prevSales) * 100;
   const totalSales = monthlyData.reduce((s, d) => s + d.sales, 0);
-  const peakMonth = monthlyData.reduce((a, b) => (a.sales > b.sales ? a : b), monthlyData[0]);
 
-  const colorIdx = data.customers.indexOf(customerName);
-  const color = CHART_COLORS[colorIdx % CHART_COLORS.length] || '#1D9E75';
+  const viewData = computeViewData(records, selectedMonth, customers, data.latestMonth);
+  const stats = viewData.customerStats.find(c => c.name === customerName);
+  const grade = stats ? GRADE_CONFIG[stats.grade] : null;
+  const color = CHART_COLORS[customers.indexOf(customerName) % CHART_COLORS.length] || '#005957';
+
+  const ptTotal = partTypeData.reduce((s, p) => s + p.value, 0);
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{ backgroundColor: 'rgba(0,0,0,0.45)' }}
+      style={{ position: 'fixed', inset: 0, zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, backgroundColor: 'rgba(0,0,0,0.5)' }}
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}
     >
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[92vh] overflow-y-auto scrollbar-thin">
+      <div style={{
+        background: 'white', borderRadius: 20, width: '100%', maxWidth: 600,
+        maxHeight: '92vh', display: 'flex', flexDirection: 'column',
+        boxShadow: '0 24px 64px rgba(0,0,0,0.20)',
+      }} className="animate-slide-up">
 
         {/* 헤더 */}
-        <div className="sticky top-0 bg-white border-b border-gray-100 px-6 py-4 flex items-center justify-between rounded-t-2xl z-10">
-          <div>
-            <h2 className="text-lg font-bold text-gray-900">{customerName}</h2>
-            <p className="text-xs text-gray-400 mt-0.5">{formatMonth(selectedMonth)} 기준 상세 현황</p>
+        <div style={{ padding: '20px 24px 16px', borderBottom: '1px solid #F2F4F6', flexShrink: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              {grade && <span className="badge" style={{ background: grade.bg, color: grade.color }}>{grade.label}</span>}
+              <div>
+                <h2 style={{ fontSize: 18, fontWeight: 700, color: '#191F28' }}>{customerName}</h2>
+                <p style={{ fontSize: 12, color: '#8B95A1', marginTop: 1 }}>{formatMonth(selectedMonth)} 기준</p>
+              </div>
+            </div>
+            <button onClick={onClose} style={{ width: 32, height: 32, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#F2F4F6', border: 'none', cursor: 'pointer' }}>
+              <X style={{ width: 16, height: 16, color: '#8B95A1' }} />
+            </button>
           </div>
-          <button
-            onClick={onClose}
-            className="w-8 h-8 rounded-xl flex items-center justify-center bg-gray-100 hover:bg-gray-200 transition-colors"
-          >
-            <X className="w-4 h-4 text-gray-600" />
-          </button>
-        </div>
 
-        <div className="p-6 space-y-6">
-
-          {/* KPI 요약 */}
-          <div className="grid grid-cols-3 gap-3">
+          {/* KPI */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginTop: 16 }}>
             {[
-              {
-                label: `${formatMonth(selectedMonth)} 매출`,
-                value: currentSales > 0 ? formatCurrencyFull(currentSales) : '-',
-              },
-              {
-                label: '전월 대비',
-                value: prevSales > 0 ? formatPercent(growth) : '-',
-                valueColor: prevSales > 0 ? (growth >= 0 ? '#1D9E75' : '#EF4444') : undefined,
-                sub: prevSales > 0 ? (
-                  <span className={`flex items-center gap-1 text-xs ${growth >= 0 ? 'text-green-600' : 'text-red-500'}`}>
-                    {growth >= 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
-                    전월 {formatCurrencyFull(prevSales)}
-                  </span>
-                ) : undefined,
-              },
-              {
-                label: '누적 매출',
-                value: formatCurrencyFull(totalSales),
-                sub: peakMonth?.sales > 0
-                  ? <span className="text-xs text-gray-400">최고: {formatAxisMonth(peakMonth.month)}</span>
-                  : undefined,
-              },
-            ].map((card, i) => (
-              <div key={i} className="bg-gray-50 rounded-xl p-3.5">
-                <p className="text-xs text-gray-500 mb-1">{card.label}</p>
-                <p className="text-sm font-bold leading-tight tabular-nums"
-                   style={{ color: (card as any).valueColor ?? '#111827' }}>
-                  {card.value}
-                </p>
-                {card.sub && <div className="mt-1">{card.sub}</div>}
+              { label: `${formatMonth(selectedMonth)} 매출`, value: currentSales > 0 ? formatCurrencyFull(currentSales) : '-', color: '#191F28' },
+              { label: '전월 대비', value: prevSales > 0 ? formatPercent(growth) : '-', color: prevSales > 0 ? (growth >= 0 ? '#00B386' : '#F04452') : '#191F28' },
+              { label: '누적 매출', value: formatCurrencyFull(totalSales), color: '#191F28' },
+            ].map((k, i) => (
+              <div key={i} style={{ background: '#F8F9FA', borderRadius: 10, padding: '10px 12px' }}>
+                <p style={{ fontSize: 11, color: '#8B95A1', fontWeight: 600, marginBottom: 4 }}>{k.label}</p>
+                <p style={{ fontSize: 14, fontWeight: 700, color: k.color }}>{k.value}</p>
               </div>
             ))}
           </div>
 
-          {/* 월별 매출 추이 */}
-          <section>
-            <h3 className="text-sm font-semibold text-gray-700 mb-3">월별 매출 추이</h3>
-            <div className="h-52">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={chartData} margin={{ top: 5, right: 5, left: 10, bottom: 5 }}>
-                  <defs>
-                    <linearGradient id={`grad-m-${customerName}`} x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor={color} stopOpacity={0.15} />
-                      <stop offset="95%" stopColor={color} stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                  <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={{ stroke: '#e5e7eb' }} tickLine={false} />
-                  <YAxis tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} tickFormatter={v => formatCurrency(v)} width={58} />
-                  <Tooltip content={<SalesAreaTooltip />} />
-                  <Area type="monotone" dataKey="sales" name="매출"
-                    stroke={color} strokeWidth={2.5}
-                    fill={`url(#grad-m-${customerName})`}
-                    dot={(p: any) => {
-                      const isSelected = p.payload?.month === selectedLabel;
-                      return <circle key={p.key} cx={p.cx} cy={p.cy} r={isSelected ? 5 : 3} fill={color} stroke={isSelected ? 'white' : 'none'} strokeWidth={2} />;
-                    }}
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
-          </section>
+          {/* 탭 */}
+          <div style={{ display: 'flex', gap: 1, marginTop: 16, background: '#F2F4F6', borderRadius: 10, padding: 3 }}>
+            {TABS.map(t => (
+              <button key={t.key} onClick={() => setTab(t.key)} style={{
+                flex: 1, padding: '7px 0', borderRadius: 7, border: 'none', cursor: 'pointer',
+                fontSize: 13, fontWeight: 600,
+                background: tab === t.key ? 'white' : 'transparent',
+                color: tab === t.key ? '#005957' : '#8B95A1',
+                boxShadow: tab === t.key ? '0 1px 4px rgba(0,0,0,0.08)' : 'none',
+                transition: 'all 0.15s',
+              }}>
+                {t.label}
+              </button>
+            ))}
+          </div>
+        </div>
 
-          {/* 거래 건수 */}
-          <section>
-            <h3 className="text-sm font-semibold text-gray-700 mb-3">월별 거래 건수</h3>
-            <div className="h-32">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={chartData} margin={{ top: 5, right: 5, left: 10, bottom: 5 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
-                  <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={{ stroke: '#e5e7eb' }} tickLine={false} />
-                  <YAxis tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} allowDecimals={false} width={30} />
-                  <Tooltip formatter={(v: number) => [`${v.toLocaleString()}건`, '거래건수']} />
-                  <Bar dataKey="count" name="거래건수" radius={[3, 3, 0, 0]}>
-                    {chartData.map((d, i) => (
-                      <Cell key={i} fill={d.month === selectedLabel ? color : `${color}60`} />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </section>
+        {/* 바디 (스크롤) */}
+        <div style={{ flex: 1, overflowY: 'auto', padding: '20px 24px' }}>
 
-          {/* Top 5 품목 */}
-          <section>
-            <h3 className="text-sm font-semibold text-gray-700 mb-3">
-              주요 품목 Top 5
-              <span className="ml-2 text-xs font-normal text-gray-400">{formatMonth(selectedMonth)} 기준</span>
-            </h3>
-            {topItems.length === 0 ? (
-              <p className="text-sm text-gray-400">해당 월 데이터 없음</p>
-            ) : (
-              <div className="space-y-2">
-                {topItems.map((item, i) => {
-                  const pct = parseFloat(item.percent);
-                  return (
-                    <div key={item.name} className="flex items-center gap-3">
-                      <span className="text-xs font-bold text-gray-400 w-4 flex-shrink-0 text-center">
-                        {i + 1}
-                      </span>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between mb-1">
-                          <span className="text-xs text-gray-700 truncate max-w-[180px]">{item.name}</span>
-                          <div className="flex items-center gap-2 flex-shrink-0 ml-2">
-                            <span className="text-xs text-gray-400 tabular-nums">{item.percent}</span>
-                            <span
-                              className="text-xs font-semibold text-gray-800 tabular-nums"
-                              title={formatCurrencyFull(item.value)}
-                            >
-                              {formatCurrency(item.value)}원
-                            </span>
-                          </div>
+          {/* 탭 1: 월별 매출 바차트 */}
+          {tab === 'trend' && (
+            <div className="animate-fade-in">
+              <div style={{ height: 220 }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={chartData} margin={{ top: 5, right: 5, left: 10, bottom: 5 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#F2F4F6" vertical={false} />
+                    <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#8B95A1' }} axisLine={false} tickLine={false}
+                      interval={chartData.length > 12 ? Math.ceil(chartData.length / 12) - 1 : 0} />
+                    <YAxis tick={{ fontSize: 11, fill: '#8B95A1' }} axisLine={false} tickLine={false}
+                      tickFormatter={v => formatCurrency(v)} width={56} />
+                    <Tooltip formatter={(v: number) => [formatCurrencyFull(v), '매출']} />
+                    <Bar dataKey="sales" radius={[5, 5, 0, 0]}>
+                      {chartData.map((d, i) => (
+                        <Cell key={i} fill={d.month === selectedLabel ? '#005957' : '#E6F2F2'} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+              <div style={{ marginTop: 12, display: 'flex', gap: 12, justifyContent: 'center' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <div style={{ width: 10, height: 10, borderRadius: 2, background: '#005957' }} />
+                  <span style={{ fontSize: 12, color: '#8B95A1' }}>선택 월</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <div style={{ width: 10, height: 10, borderRadius: 2, background: '#E6F2F2' }} />
+                  <span style={{ fontSize: 12, color: '#8B95A1' }}>기타 월</span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 탭 2: 품목 Top 5 */}
+          {tab === 'items' && (
+            <div className="animate-fade-in">
+              {topItems.length === 0 ? (
+                <p style={{ color: '#8B95A1', fontSize: 14, textAlign: 'center', padding: '40px 0' }}>해당 월 데이터 없음</p>
+              ) : topItems.map((item, i) => {
+                const pct = parseFloat(item.percent);
+                const rankColors = ['#005957', '#00B386', '#3B82F6', '#F59E0B', '#8B5CF6'];
+                return (
+                  <div key={item.name} style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 16 }}>
+                    <div style={{
+                      width: 28, height: 28, borderRadius: '50%', flexShrink: 0,
+                      background: rankColors[i] ?? '#8B95A1',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    }}>
+                      <span style={{ fontSize: 12, fontWeight: 800, color: 'white' }}>{i + 1}</span>
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                        <span style={{ fontSize: 13, color: '#191F28', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 200 }}>
+                          {item.name}
+                        </span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0, marginLeft: 8 }}>
+                          <span style={{ fontSize: 12, color: '#8B95A1' }}>{item.percent}</span>
+                          <span style={{ fontSize: 12, fontWeight: 700, color: '#191F28' }}>{formatCurrency(item.value)}원</span>
                         </div>
-                        <div className="w-full bg-gray-100 rounded-full h-1.5">
-                          <div
-                            className="h-1.5 rounded-full transition-all"
-                            style={{ width: `${Math.min(pct, 100)}%`, backgroundColor: color }}
-                          />
-                        </div>
+                      </div>
+                      <div style={{ width: '100%', background: '#F2F4F6', borderRadius: 4, height: 6 }}>
+                        <div style={{ width: `${Math.min(pct, 100)}%`, background: rankColors[i] ?? '#8B95A1', height: 6, borderRadius: 4, transition: 'width 0.4s ease' }} />
                       </div>
                     </div>
-                  );
-                })}
-              </div>
-            )}
-          </section>
-
-          {/* 부품유형별 비중 */}
-          <section>
-            <h3 className="text-sm font-semibold text-gray-700 mb-3">
-              부품유형별 매출
-              <span className="ml-2 text-xs font-normal text-gray-400">{formatMonth(selectedMonth)} 기준</span>
-            </h3>
-            {partTypeData.length === 0 ? (
-              <p className="text-sm text-gray-400">해당 월 데이터 없음</p>
-            ) : (
-              <div className="grid grid-cols-2 gap-2">
-                {(() => {
-                  const ptTotal = partTypeData.reduce((s, p) => s + p.value, 0);
-                  return partTypeData.map((pt, i) => {
-                    const pct = ptTotal > 0 ? ((pt.value / ptTotal) * 100).toFixed(1) : '0';
-                    return (
-                      <div
-                        key={pt.name}
-                        className="flex items-center gap-3 p-3 rounded-xl border border-gray-100 bg-gray-50"
-                      >
-                        <div
-                          className="w-3 h-3 rounded-sm flex-shrink-0"
-                          style={{ backgroundColor: PIE_COLORS[i % PIE_COLORS.length] }}
-                        />
-                        <div className="min-w-0 flex-1">
-                          <p className="text-xs font-medium text-gray-700">{pt.name}</p>
-                          <p className="text-xs text-gray-400 tabular-nums">{pct}%</p>
-                        </div>
-                        <p
-                          className="text-xs font-semibold text-gray-800 flex-shrink-0 tabular-nums"
-                          title={formatCurrencyFull(pt.value)}
-                        >
-                          {formatCurrency(pt.value)}원
-                        </p>
-                      </div>
-                    );
-                  });
-                })()}
-              </div>
-            )}
-          </section>
-
-          {/* 월별 상세 테이블 */}
-          <section>
-            <h3 className="text-sm font-semibold text-gray-700 mb-3">월별 상세</h3>
-            <div className="overflow-x-auto scrollbar-thin">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="bg-gray-50">
-                    <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500">월</th>
-                    <th className="px-3 py-2 text-right text-xs font-semibold text-gray-500">매출</th>
-                    <th className="px-3 py-2 text-right text-xs font-semibold text-gray-500">건수</th>
-                    <th className="px-3 py-2 text-right text-xs font-semibold text-gray-500">증감률</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-50">
-                  {[...monthlyData].reverse().map((row, i, arr) => {
-                    const prev = arr[i + 1];
-                    const gr = prev && prev.sales > 0
-                      ? ((row.sales - prev.sales) / prev.sales) * 100
-                      : null;
-                    const isSelected = row.month === selectedMonth;
-                    return (
-                      <tr key={row.month} className={isSelected ? 'bg-green-50' : ''}>
-                        <td className="px-3 py-2 font-medium text-gray-700">
-                          {formatAxisMonth(row.month)}
-                          {isSelected && (
-                            <span className="ml-2 text-xs px-1.5 py-0.5 rounded-full text-white" style={{ backgroundColor: '#1D9E75' }}>
-                              선택
-                            </span>
-                          )}
-                        </td>
-                        <td className="px-3 py-2 text-right font-semibold text-gray-800 tabular-nums">
-                          {row.sales > 0
-                            ? <span title={formatCurrencyFull(row.sales)}>{formatCurrency(row.sales)}원</span>
-                            : <span className="text-gray-300">-</span>}
-                        </td>
-                        <td className="px-3 py-2 text-right text-gray-600 tabular-nums">
-                          {row.count > 0 ? `${row.count.toLocaleString()}건` : '-'}
-                        </td>
-                        <td className="px-3 py-2 text-right">
-                          {gr !== null ? (
-                            <span className={`text-xs font-semibold ${gr >= 0 ? 'text-green-600' : 'text-red-500'}`}>
-                              {formatPercent(gr)}
-                            </span>
-                          ) : <span className="text-gray-300">-</span>}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+                  </div>
+                );
+              })}
             </div>
-          </section>
+          )}
+
+          {/* 탭 3: 부품 유형 도넛 */}
+          {tab === 'parttype' && (
+            <div className="animate-fade-in">
+              {partTypeData.length === 0 ? (
+                <p style={{ color: '#8B95A1', fontSize: 14, textAlign: 'center', padding: '40px 0' }}>해당 월 데이터 없음</p>
+              ) : (
+                <>
+                  <div style={{ height: 200 }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie data={partTypeData} cx="50%" cy="50%"
+                          innerRadius="38%" outerRadius="68%"
+                          paddingAngle={2} dataKey="value">
+                          {partTypeData.map((_, i) => (
+                            <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
+                          ))}
+                        </Pie>
+                        <Tooltip content={<DonutTooltip />} />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </div>
+                  <div style={{ marginTop: 12 }}>
+                    {partTypeData.map((pt, i) => (
+                      <div key={pt.name} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+                        <div style={{ width: 10, height: 10, borderRadius: 3, flexShrink: 0, background: PIE_COLORS[i % PIE_COLORS.length] }} />
+                        <span style={{ fontSize: 13, color: '#8B95A1', flex: 1 }}>{pt.name}</span>
+                        <span style={{ fontSize: 12, color: '#8B95A1' }}>
+                          {ptTotal > 0 ? `${((pt.value / ptTotal) * 100).toFixed(1)}%` : '0%'}
+                        </span>
+                        <span style={{ fontSize: 13, fontWeight: 600, color: '#191F28' }}>{formatCurrency(pt.value)}원</span>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* 하단 sticky 버튼 */}
+        <div style={{ padding: '12px 24px 20px', borderTop: '1px solid #F2F4F6', flexShrink: 0 }}>
+          <button
+            onClick={onReport}
+            className="btn-primary"
+            style={{ width: '100%', justifyContent: 'center', gap: 8 }}
+          >
+            <FileText style={{ width: 16, height: 16 }} />
+            이 고객사 리포트 PDF 생성
+          </button>
         </div>
       </div>
     </div>

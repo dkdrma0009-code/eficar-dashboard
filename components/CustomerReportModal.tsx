@@ -15,15 +15,26 @@ interface Props {
   onClose: () => void;
 }
 
-const BRAND = '#1D9E75';
-const BRAND_LIGHT = '#D1FAE5';
-const CONTACT_EMAIL = 'sgpark@eficar.co.kr';
-const CONTACT_PHONE = '+82 10-8958-8601';
+const BRAND = '#005957';
+const BRAND_LIGHT = '#E6F2F2';
+const CONTACT_EMAIL = 'info@eficar.co.kr';
+const CONTACT_PHONE = '010-2752-1054';
 const SAVINGS_RATE = 0.35; // OEM 대비 절감률
 
 function getPrevMonthKey(months: string[], month: string): string {
   const idx = months.indexOf(month);
   return idx > 0 ? months[idx - 1] : '';
+}
+
+function ReportLogo() {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+      <div style={{ width: 32, height: 32, borderRadius: 8, background: 'rgba(255,255,255,0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <span style={{ color: 'white', fontWeight: 900, fontSize: 18, lineHeight: 1 }}>∞</span>
+      </div>
+      <span style={{ fontSize: '20px', fontWeight: 900, color: 'white', letterSpacing: '-0.5px', lineHeight: 1 }}>에픽카</span>
+    </div>
+  );
 }
 
 export default function CustomerReportModal({ data, defaultCustomer, defaultMonth, onClose }: Props) {
@@ -212,9 +223,7 @@ export default function CustomerReportModal({ data, defaultCustomer, defaultMont
           }}>
             {/* 좌측: 로고 */}
             <div>
-              <div style={{ fontSize: '22px', fontWeight: 900, letterSpacing: '-0.5px', lineHeight: 1 }}>
-                ∞에픽카
-              </div>
+              <ReportLogo />
               <div style={{ fontSize: '10px', opacity: 0.8, marginTop: '4px', letterSpacing: '0.5px' }}>
                 부품비 절감 솔루션
               </div>
@@ -264,12 +273,12 @@ export default function CustomerReportModal({ data, defaultCustomer, defaultMont
                   {totalSales > 0 && <div style={{ fontSize: '9px', color: '#9CA3AF', marginTop: '4px' }}>{formatCurrencyFull(totalSales)}</div>}
                 </div>
                 {/* 카드 4: OEM 대비 절감액 (강조) */}
-                <div style={{ border: `1.5px solid ${BRAND}`, borderRadius: '10px', padding: '11px 14px', backgroundColor: '#F0FDF9' }}>
+                <div style={{ border: `1.5px solid ${BRAND}`, borderRadius: '10px', padding: '11px 14px', backgroundColor: BRAND_LIGHT }}>
                   <div style={{ fontSize: '10px', color: BRAND, fontWeight: 600, marginBottom: '5px' }}>OEM 대비 절감액 ✦</div>
                   <div style={{ fontSize: '15px', fontWeight: 800, color: BRAND, lineHeight: 1.2 }}>
                     {savingsAmount > 0 ? `${formatCurrency(savingsAmount)}원` : '-'}
                   </div>
-                  {savingsAmount > 0 && <div style={{ fontSize: '9px', color: '#059669', marginTop: '4px' }}>공급금액의 약 35% 절감</div>}
+                  {savingsAmount > 0 && <div style={{ fontSize: '9px', color: BRAND, marginTop: '4px' }}>공급금액의 약 35% 절감</div>}
                 </div>
               </div>
             </section>
@@ -383,7 +392,7 @@ export default function CustomerReportModal({ data, defaultCustomer, defaultMont
           </div>
 
           {/* ── 인사이트 문구 ──────────────────────────────────────── */}
-          <div style={{ margin: '12px 36px 0', padding: '12px 16px', backgroundColor: '#F0FDF9', borderRadius: '10px', border: `1px solid ${BRAND_LIGHT}` }}>
+          <div style={{ margin: '12px 36px 0', padding: '12px 16px', backgroundColor: BRAND_LIGHT, borderRadius: '10px', border: `1px solid ${BRAND}22` }}>
             <div style={{ fontSize: '11px', color: BRAND, fontWeight: 600, lineHeight: 1.6 }}>
               에픽카와 함께&nbsp;
               <strong style={{ fontWeight: 800 }}>{selectedCustomer}</strong>의 누적 절감액이&nbsp;

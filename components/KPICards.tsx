@@ -1,90 +1,98 @@
 'use client';
-
-import { TrendingUp, TrendingDown, DollarSign, ShoppingCart, Users, Minus } from 'lucide-react';
+import { TrendingUp, TrendingDown, BarChart2, Users, ShoppingCart, Activity } from 'lucide-react';
+import { useCountUp } from '@/hooks/useCountUp';
+import { formatCurrency, formatPercent } from '@/lib/dataUtils';
 import type { ViewData } from '@/lib/types';
-import { formatCurrency, formatCurrencyFull, formatPercent, formatMonth } from '@/lib/dataUtils';
 
-interface Props {
-  viewData: ViewData;
-}
-
-export default function KPICards({ viewData }: Props) {
-  const {
-    selectedMonth, totalCurrentSales, totalPrevSales,
-    growthRate, transactionCount, activeCustomers,
-  } = viewData;
-
-  const cards = [
-    {
-      title: '이번 달 총 매출',
-      subtitle: formatMonth(selectedMonth),
-      value: `${formatCurrency(totalCurrentSales)}원`,
-      exact: formatCurrencyFull(totalCurrentSales),
-      icon: DollarSign,
-      iconColor: '#1D9E75',
-      iconBg: '#E8F7F2',
-    },
-    {
-      title: '전월 대비 증감률',
-      subtitle: `전월 ${formatCurrency(totalPrevSales)}원`,
-      value: totalPrevSales > 0 ? formatPercent(growthRate) : '-',
-      exact: totalPrevSales > 0 ? `${formatCurrencyFull(totalCurrentSales)} vs ${formatCurrencyFull(totalPrevSales)}` : undefined,
-      icon: growthRate > 0 ? TrendingUp : growthRate < 0 ? TrendingDown : Minus,
-      iconColor: growthRate > 0 ? '#1D9E75' : growthRate < 0 ? '#EF4444' : '#6B7280',
-      iconBg: growthRate > 0 ? '#E8F7F2' : growthRate < 0 ? '#FEF2F2' : '#F3F4F6',
-      valueColor: growthRate > 0 ? '#1D9E75' : growthRate < 0 ? '#EF4444' : '#6B7280',
-    },
-    {
-      title: '총 거래 건수',
-      subtitle: '이번 달 기준',
-      value: `${transactionCount.toLocaleString()}건`,
-      icon: ShoppingCart,
-      iconColor: '#3B82F6',
-      iconBg: '#EFF6FF',
-    },
-    {
-      title: '활성 고객사 수',
-      subtitle: '이번 달 거래 발생',
-      value: `${activeCustomers}개사`,
-      icon: Users,
-      iconColor: '#8B5CF6',
-      iconBg: '#F5F3FF',
-    },
-  ];
+function KPICard({ label, rawValue, displayFn, sub, growth, icon: Icon, accentColor }: {
+  label: string; rawValue: number;
+  displayFn: (v: number) => string;
+  sub?: string; growth?: number;
+  icon: React.ElementType;
+  accentColor: string;
+}) {
+  const count = useCountUp(rawValue);
+  const isGrowth = growth !== undefined;
+  const up = isGrowth && growth >= 0;
 
   return (
-    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-      {cards.map(card => {
-        const Icon = card.icon;
-        return (
-          <div
-            key={card.title}
-            title={card.exact}
-            className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm hover:shadow-md transition-shadow"
-          >
-            <div className="flex items-start justify-between mb-4">
-              <div className="min-w-0">
-                <p className="text-xs font-medium text-gray-500 uppercase tracking-wide truncate">
-                  {card.title}
-                </p>
-                <p className="text-xs text-gray-400 mt-0.5 truncate">{card.subtitle}</p>
-              </div>
-              <div
-                className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ml-2"
-                style={{ backgroundColor: card.iconBg }}
-              >
-                <Icon className="w-5 h-5" style={{ color: card.iconColor }} />
-              </div>
-            </div>
-            <p
-              className="text-2xl font-bold tracking-tight tabular-nums"
-              style={{ color: (card as any).valueColor ?? '#111827' }}
-            >
-              {card.value}
-            </p>
-          </div>
-        );
-      })}
+    <div className="card card-hover" style={{ padding: '20px 24px', position: 'relative', overflow: 'hidden' }}>
+      {/* 상단 배경 장식 */}
+      <div style={{
+        position: 'absolute', top: -20, right: -20,
+        width: 80, height: 80, borderRadius: '50%',
+        background: accentColor, opacity: 0.06,
+      }} />
+
+      {/* 상단 행 */}
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 16 }}>
+        <p style={{ fontSize: 12, fontWeight: 600, color: '#8B95A1', lineHeight: 1.4 }}>{label}</p>
+        <div style={{
+          width: 36, height: 36, borderRadius: 10, flexShrink: 0,
+          background: accentColor + '18',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}>
+          <Icon style={{ width: 18, height: 18, color: accentColor }} />
+        </div>
+      </div>
+
+      {/* 수치 */}
+      <p style={{ fontSize: 28, fontWeight: 800, color: '#191F28', lineHeight: 1, marginBottom: 10 }}>
+        {displayFn(count)}
+      </p>
+
+      {/* 하단 행 */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+        {sub && <span style={{ fontSize: 12, color: '#8B95A1', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sub}</span>}
+        {isGrowth && (
+          <span style={{
+            display: 'inline-flex', alignItems: 'center', gap: 3,
+            padding: '3px 8px', borderRadius: 20, fontSize: 12, fontWeight: 700, flexShrink: 0,
+            background: up ? '#E6FAF5' : '#FFF0F1',
+            color: up ? '#00B386' : '#F04452',
+          }}>
+            {up
+              ? <TrendingUp style={{ width: 11, height: 11 }} />
+              : <TrendingDown style={{ width: 11, height: 11 }} />}
+            {Math.abs(growth).toFixed(1)}%
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export default function KPICards({ viewData }: { viewData: ViewData }) {
+  const { totalCurrentSales, totalPrevSales, growthRate, transactionCount, activeCustomers, selectedMonth, prevMonth, isLatestMonth } = viewData;
+
+  return (
+    <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(4,1fr)' }}>
+      <KPICard
+        label="이번 달 매출" rawValue={totalCurrentSales}
+        displayFn={v => `${formatCurrency(Math.round(v))}원`}
+        sub={`전월 ${formatCurrency(totalPrevSales)}원`}
+        growth={growthRate}
+        icon={BarChart2} accentColor="#005957"
+      />
+      <KPICard
+        label="전월 대비 증감률" rawValue={Math.abs(growthRate)}
+        displayFn={v => `${growthRate >= 0 ? '+' : '-'}${v.toFixed(1)}%`}
+        sub={isLatestMonth ? `${prevMonth} 전체 vs ${selectedMonth} 진행중` : `${prevMonth} → ${selectedMonth}`}
+        growth={growthRate}
+        icon={Activity} accentColor={growthRate >= 0 ? '#00B386' : '#F04452'}
+      />
+      <KPICard
+        label="거래 건수" rawValue={transactionCount}
+        displayFn={v => `${Math.round(v).toLocaleString()}건`}
+        sub="이번 달 전체 거래"
+        icon={ShoppingCart} accentColor="#6366F1"
+      />
+      <KPICard
+        label="활성 고객사" rawValue={activeCustomers}
+        displayFn={v => `${Math.round(v)}개사`}
+        sub="이번 달 거래 고객사"
+        icon={Users} accentColor="#F59E0B"
+      />
     </div>
   );
 }

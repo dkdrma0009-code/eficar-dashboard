@@ -4,9 +4,9 @@ import { useState, useRef, useCallback, useMemo } from 'react';
 import Link from 'next/link';
 import { Download, FileText, Loader2, RotateCcw } from 'lucide-react';
 
-const BRAND = '#1D9E75';
-const BRAND_LIGHT = '#D1FAE5';
-const CONTACT_EMAIL = 'sgpark@eficar.co.kr';
+const BRAND = '#005957';
+const BRAND_LIGHT = '#E6F2F2';
+const CONTACT_EMAIL = 'info@eficar.co.kr';
 const CONTACT_PHONE = '+82 10-8958-8601';
 
 interface Param {
@@ -120,6 +120,17 @@ function SliderInput({ param, value, onChange }: SliderInputProps) {
         <span>{param.format(param.min)}{param.unit}</span>
         <span>{param.format(param.max)}{param.unit}</span>
       </div>
+    </div>
+  );
+}
+
+function CalcLogo() {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 4 }}>
+      <div style={{ width: 26, height: 26, borderRadius: 7, background: 'rgba(255,255,255,0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <span style={{ color: 'white', fontWeight: 900, fontSize: 15, lineHeight: 1 }}>∞</span>
+      </div>
+      <span style={{ fontSize: 17, fontWeight: 900, color: 'white', letterSpacing: '-0.3px' }}>에픽카</span>
     </div>
   );
 }
@@ -294,7 +305,7 @@ export default function CalculatorPage() {
                 >
                   <div className="flex justify-between items-start">
                     <div className="text-white">
-                      <div className="text-xl font-900 font-black">∞에픽카</div>
+                      <CalcLogo />
                       <div className="text-sm opacity-85 mt-0.5">연간 절감액 계산 결과</div>
                     </div>
                     <div className="text-right text-white">

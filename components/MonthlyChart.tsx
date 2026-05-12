@@ -1,192 +1,116 @@
 'use client';
-
 import { useState, useMemo } from 'react';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
-  ResponsiveContainer,
+  ResponsiveContainer, Legend,
 } from 'recharts';
-import type { DashboardData } from '@/lib/types';
+import { ChevronDown, ChevronUp } from 'lucide-react';
 import { CHART_COLORS, formatCurrency, formatAxisMonth } from '@/lib/dataUtils';
+import type { MonthlyData } from '@/lib/types';
 
-interface Props {
-  data: DashboardData;
-  selectedMonth: string;
+interface Props { monthlyData: MonthlyData[]; customers: string[]; }
+
+function formatYAxis(v: number) {
+  if (v === 0) return '0';
+  if (v >= 100_000_000) return `${(v / 100_000_000).toFixed(0)}억`;
+  if (v >= 10_000_000) return `${(v / 10_000_000).toFixed(0)}천만`;
+  if (v >= 10_000) return `${(v / 10_000).toFixed(0)}만`;
+  return v.toString();
 }
 
-function CustomTooltip({ active, payload, label }: any) {
+const CustomTooltip = ({ active, payload, label }: any) => {
   if (!active || !payload?.length) return null;
   return (
-    <div className="bg-white border border-gray-200 rounded-xl shadow-lg p-3 min-w-[190px]">
-      <p className="text-xs font-semibold text-gray-500 mb-2">{label}</p>
-      {payload.map((entry: any) => (
-        <div key={entry.dataKey} className="flex items-center justify-between gap-4 py-0.5">
-          <div className="flex items-center gap-1.5 min-w-0">
-            <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: entry.color }} />
-            <span className="text-xs text-gray-600 truncate max-w-[100px]">{entry.name}</span>
-          </div>
-          <span className="text-xs font-semibold text-gray-800 tabular-nums">
-            {formatCurrency(entry.value)}원
+    <div className="card" style={{ padding: '12px 16px', minWidth: 160, boxShadow: '0 4px 16px rgba(0,0,0,0.12)' }}>
+      <p className="text-xs font-semibold mb-2" style={{ color: '#8B95A1' }}>{label}</p>
+      {payload.map((p: any) => (
+        <div key={p.dataKey} className="flex items-center justify-between gap-4 text-sm">
+          <span className="flex items-center gap-1.5">
+            <span style={{ width: 8, height: 8, borderRadius: '50%', background: p.color, display: 'inline-block' }} />
+            {p.name}
           </span>
+          <span className="font-bold">{formatCurrency(p.value)}</span>
         </div>
       ))}
     </div>
   );
-}
+};
 
-export default function MonthlyChart({ data }: Props) {
-  const { monthlyData, customers } = data;
+export default function MonthlyChart({ monthlyData, customers }: Props) {
+  const [showCustomers, setShowCustomers] = useState(false);
+  const [activeCustomers, setActiveCustomers] = useState<Set<string>>(new Set());
 
-  // 기본값: 전체 합산만 활성화, 고객사 토글 접혀있음
-  const [activeKeys, setActiveKeys] = useState<Set<string>>(new Set(['total']));
-  const [showCustomerToggles, setShowCustomerToggles] = useState(false);
+  const toggleCustomer = (name: string) => {
+    setActiveCustomers(prev => {
+      const next = new Set(prev);
+      next.has(name) ? next.delete(name) : next.add(name);
+      return next;
+    });
+  };
 
-  const chartData = useMemo(
-    () => monthlyData.map(d => ({ ...d, month: formatAxisMonth(d.month) })),
-    [monthlyData],
-  );
-
-  // 전체 합산 클릭: 항상 전체로 리셋
-  // 고객사 클릭: 전체 합산 비활성화하고 해당 고객사 토글
-  function toggle(key: string) {
-    if (key === 'total') {
-      setActiveKeys(new Set(['total']));
-    } else {
-      setActiveKeys(prev => {
-        const next = new Set(prev);
-        next.delete('total');
-        if (next.has(key)) {
-          next.delete(key);
-          if (next.size === 0) return new Set(['total']); // 모두 꺼지면 전체로
-        } else {
-          next.add(key);
-        }
-        return next;
-      });
-    }
-  }
-
-  function handleExpandCustomers() {
-    setShowCustomerToggles(true);
-  }
-
-  function handleCollapseCustomers() {
-    setShowCustomerToggles(false);
-    setActiveKeys(new Set(['total']));
-  }
+  const showTotal = activeCustomers.size === 0;
+  const displayData = useMemo(() => monthlyData.map(d => ({
+    ...d, month: formatAxisMonth(d.month),
+  })), [monthlyData]);
 
   return (
-    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
+    <div className="card">
+      <div className="flex items-center justify-between mb-5">
         <div>
-          <h2 className="text-base font-semibold text-gray-900">월별 매출 추이</h2>
-          <p className="text-xs text-gray-400 mt-0.5">
-            {data.allMonths[0] && formatAxisMonth(data.allMonths[0])} ~{' '}
-            {data.allMonths[data.allMonths.length - 1] && formatAxisMonth(data.allMonths[data.allMonths.length - 1])}
-            {' · '}총 {data.allMonths.length}개월
-          </p>
+          <h2 style={{ fontSize: 18, fontWeight: 600, color: '#191F28' }}>월별 매출 추이</h2>
+          <p className="text-xs mt-0.5" style={{ color: '#8B95A1' }}>전체 합산 기준</p>
         </div>
+        <button onClick={() => setShowCustomers(v => !v)} className="btn-outline gap-1.5">
+          고객사 토글
+          {showCustomers ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+        </button>
       </div>
 
-      {/* 토글 버튼 */}
-      <div className="flex flex-wrap gap-2 mb-4">
-        {/* 전체 합산 버튼 */}
-        {(() => {
-          const isTotal = activeKeys.has('total');
-          return (
-            <button
-              onClick={() => toggle('total')}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-all"
-              style={
-                isTotal
-                  ? { backgroundColor: '#1D9E75', borderColor: '#1D9E75', color: 'white' }
-                  : { backgroundColor: 'white', borderColor: '#e5e7eb', color: '#6b7280' }
-              }
-            >
-              <div className="w-2 h-2 rounded-full" style={{ backgroundColor: isTotal ? 'white' : '#1D9E75' }} />
-              전체 합산
+      {/* 고객사 토글 버튼 목록 */}
+      {showCustomers && (
+        <div className="flex flex-wrap gap-2 mb-4 animate-slide-down">
+          {customers.map((c, i) => {
+            const active = activeCustomers.has(c);
+            return (
+              <button key={c} onClick={() => toggleCustomer(c)}
+                className="text-xs font-semibold px-3 py-1.5 rounded-full transition-all"
+                style={{
+                  background: active ? CHART_COLORS[i % CHART_COLORS.length] : '#F2F4F6',
+                  color: active ? 'white' : '#8B95A1',
+                  border: 'none',
+                }}>
+                {c}
+              </button>
+            );
+          })}
+          {activeCustomers.size > 0 && (
+            <button onClick={() => setActiveCustomers(new Set())}
+              className="text-xs font-semibold px-3 py-1.5 rounded-full transition-all"
+              style={{ background: '#F2F4F6', color: '#8B95A1', border: 'none' }}>
+              전체 보기
             </button>
-          );
-        })()}
+          )}
+        </div>
+      )}
 
-        {/* 고객사 토글 버튼들 (펼쳐진 상태일 때만 표시) */}
-        {showCustomerToggles && customers.map((c, i) => {
-          const color = CHART_COLORS[(i + 1) % CHART_COLORS.length];
-          const active = activeKeys.has(c);
-          return (
-            <button
-              key={c}
-              onClick={() => toggle(c)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-all"
-              style={
-                active
-                  ? { backgroundColor: color, borderColor: color, color: 'white' }
-                  : { backgroundColor: 'white', borderColor: '#e5e7eb', color: '#6b7280' }
-              }
-            >
-              <div className="w-2 h-2 rounded-full" style={{ backgroundColor: active ? 'white' : color }} />
-              {c}
-            </button>
-          );
-        })}
-
-        {/* 펼치기 / 접기 버튼 */}
-        {!showCustomerToggles ? (
-          <button
-            onClick={handleExpandCustomers}
-            className="px-3 py-1.5 rounded-full text-xs font-medium border border-dashed border-gray-300 text-gray-400 hover:border-gray-400 hover:text-gray-600 transition-all"
-          >
-            +{customers.length}개 더 ▾
-          </button>
-        ) : (
-          <button
-            onClick={handleCollapseCustomers}
-            className="px-3 py-1.5 rounded-full text-xs font-medium border border-dashed border-gray-300 text-gray-400 hover:border-gray-400 hover:text-gray-600 transition-all"
-          >
-            접기 ▴
-          </button>
-        )}
-      </div>
-
-      <div className="h-72 sm:h-80">
-        <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={chartData} margin={{ top: 5, right: 10, left: 10, bottom: 5 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-            <XAxis
-              dataKey="month"
-              tick={{ fontSize: 11, fill: '#9ca3af' }}
-              axisLine={{ stroke: '#e5e7eb' }}
-              tickLine={false}
-            />
-            <YAxis
-              tick={{ fontSize: 11, fill: '#9ca3af' }}
-              axisLine={false}
-              tickLine={false}
-              tickFormatter={v => formatCurrency(v)}
-              width={58}
-            />
-            <Tooltip content={<CustomTooltip />} />
-
-            {activeKeys.has('total') && (
-              <Line
-                type="monotone" dataKey="total" name="전체 합산"
-                stroke="#1D9E75" strokeWidth={2.5}
-                dot={{ r: 3, fill: '#1D9E75' }} activeDot={{ r: 5 }}
-              />
-            )}
-            {customers.map((c, i) =>
-              activeKeys.has(c) ? (
-                <Line
-                  key={c} type="monotone" dataKey={c} name={c}
-                  stroke={CHART_COLORS[(i + 1) % CHART_COLORS.length]}
-                  strokeWidth={1.8}
-                  dot={{ r: 2.5 }} activeDot={{ r: 4.5 }}
-                  strokeDasharray={i % 2 === 0 ? undefined : '4 2'}
-                />
-              ) : null,
-            )}
-          </LineChart>
-        </ResponsiveContainer>
-      </div>
+      <ResponsiveContainer width="100%" height={300}>
+        <LineChart data={displayData} margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="#F2F4F6" />
+          <XAxis dataKey="month" tick={{ fontSize: 12, fill: '#8B95A1' }} axisLine={false} tickLine={false}
+            interval={displayData.length > 12 ? Math.ceil(displayData.length / 12) - 1 : 0} />
+          <YAxis tickFormatter={formatYAxis} tick={{ fontSize: 12, fill: '#8B95A1' }} axisLine={false} tickLine={false} width={60} />
+          <Tooltip content={<CustomTooltip />} />
+          {showTotal && (
+            <Line type="monotone" dataKey="total" name="전체 합산"
+              stroke="#005957" strokeWidth={2.5} dot={false} activeDot={{ r: 5, fill: '#005957' }} />
+          )}
+          {!showTotal && customers.filter(c => activeCustomers.has(c)).map((c, i) => (
+            <Line key={c} type="monotone" dataKey={c} name={c}
+              stroke={CHART_COLORS[i % CHART_COLORS.length]} strokeWidth={2}
+              dot={false} activeDot={{ r: 4 }} />
+          ))}
+        </LineChart>
+      </ResponsiveContainer>
     </div>
   );
 }

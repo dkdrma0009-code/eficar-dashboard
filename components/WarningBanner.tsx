@@ -1,47 +1,45 @@
 'use client';
-
-import { AlertTriangle, X, ChevronRight } from 'lucide-react';
-import type { ViewData } from '@/lib/types';
-import { formatPercent } from '@/lib/dataUtils';
 import { useState } from 'react';
+import { AlertTriangle, X } from 'lucide-react';
+import type { AtRiskCustomer } from '@/lib/types';
+import { formatCurrency, formatPercent } from '@/lib/dataUtils';
 
-interface Props {
-  viewData: ViewData;
-  onSelectCustomer: (name: string) => void;
-}
+interface Props { customers: AtRiskCustomer[]; onSelectCustomer: (name: string) => void; }
 
-export default function WarningBanner({ viewData, onSelectCustomer }: Props) {
+export default function WarningBanner({ customers, onSelectCustomer }: Props) {
   const [dismissed, setDismissed] = useState<Set<string>>(new Set());
-
-  const visible = viewData.atRiskCustomers.filter(c => !dismissed.has(c.name));
-  if (!visible.length) return null;
+  const visible = customers.filter(c => !dismissed.has(c.name));
+  if (visible.length === 0) return null;
 
   return (
-    <div className="space-y-2">
+    <div className="rounded-2xl overflow-hidden" style={{ border: '1px solid #FFE0B2' }}>
+      <div className="px-4 py-2.5 flex items-center gap-2" style={{ background: '#FFF8F0', borderLeft: '4px solid #FF9500' }}>
+        <AlertTriangle className="w-4 h-4 flex-shrink-0" style={{ color: '#FF9500' }} />
+        <p className="text-sm font-semibold" style={{ color: '#191F28' }}>
+          이탈 위험 고객사 {visible.length}개사
+        </p>
+        <p className="text-xs" style={{ color: '#8B95A1' }}>전월 대비 30% 이상 감소</p>
+      </div>
       {visible.map(c => (
-        <div
-          key={c.name}
-          className="flex items-center gap-3 px-4 py-3 bg-amber-50 border border-amber-200 rounded-xl"
-        >
-          <AlertTriangle className="w-4 h-4 text-amber-500 flex-shrink-0" />
-          <p className="text-sm text-amber-800 flex-1 min-w-0">
-            <span className="font-semibold">[{c.name}]</span> 전월 대비{' '}
-            <span className="font-bold text-red-600">{formatPercent(c.growthRate)}</span> 감소 —
-            확인이 필요합니다
-          </p>
-          <button
-            onClick={() => onSelectCustomer(c.name)}
-            className="flex items-center gap-1 text-xs font-medium text-amber-700 hover:text-amber-900 whitespace-nowrap flex-shrink-0 transition-colors"
-          >
-            상세보기
-            <ChevronRight className="w-3.5 h-3.5" />
-          </button>
-          <button
-            onClick={() => setDismissed(prev => new Set(prev).add(c.name))}
-            className="text-amber-400 hover:text-amber-600 transition-colors flex-shrink-0"
-          >
-            <X className="w-4 h-4" />
-          </button>
+        <div key={c.name} onClick={() => onSelectCustomer(c.name)}
+          className="flex items-center justify-between px-4 py-3 cursor-pointer transition-colors"
+          style={{ background: '#FFFCF8', borderTop: '1px solid #F2F4F6' }}
+          onMouseEnter={e => (e.currentTarget.style.background = '#FFF3E0')}
+          onMouseLeave={e => (e.currentTarget.style.background = '#FFFCF8')}>
+          <div className="flex items-center gap-3">
+            <span className="badge" style={{ background: '#FFF0F1', color: '#F04452', fontSize: 11 }}>위험</span>
+            <span className="font-semibold text-sm" style={{ color: '#191F28' }}>{c.name}</span>
+            <span className="text-xs" style={{ color: '#8B95A1' }}>
+              {formatCurrency(c.currentSales)} (전월 {formatCurrency(c.prevSales)})
+            </span>
+          </div>
+          <div className="flex items-center gap-3">
+            <span className="font-bold text-sm" style={{ color: '#F04452' }}>{formatPercent(c.growthRate)}</span>
+            <button onClick={e => { e.stopPropagation(); setDismissed(p => new Set([...p, c.name])); }}
+              className="p-1 rounded-full hover:bg-gray-100 transition-colors">
+              <X className="w-3.5 h-3.5" style={{ color: '#8B95A1' }} />
+            </button>
+          </div>
         </div>
       ))}
     </div>
