@@ -280,7 +280,7 @@ export default function CampaignsPage() {
   }
 
   function openEdit(r: CampaignRecord) {
-    setForm({ date: r.date, customer: r.customer, channel: r.channel, contentSummary: r.contentSummary, outcome: r.outcome, note: r.note });
+    setForm({ date: r.date, customer: r.customer, channel: r.channel, contentSummary: r.contentSummary, outcome: r.outcome, note: r.note, scheduledDate: r.scheduledDate ?? '' });
     setEditId(r.id);
     setShowForm(true);
   }

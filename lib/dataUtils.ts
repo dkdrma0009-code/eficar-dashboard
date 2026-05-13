@@ -231,7 +231,7 @@ export function computeViewData(
 export function getCustomerTopItems(
   records: SalesRecord[], customer: string, month: string, n = 5,
 ): Array<{ name: string; value: number; percent: string }> {
-  const recs = records.filter(r => r.service === customer && r.date === month);
+  const recs = records.filter(r => (customer === '' || r.service === customer) && r.date === month);
   const map = new Map<string, number>();
   recs.forEach(r => {
     const key = r.itemName.trim().replace(/\s+/g, ' ') || '미분류';
@@ -285,8 +285,7 @@ export async function downloadReport(records: SalesRecord[], viewData: ViewData)
 export function formatCurrency(amount: number): string {
   const n = Math.round(amount);
   if (n >= 100_000_000) {
-    const ok = n / 100_000_000;
-    return ok >= 1 ? `${ok.toFixed(1)}억` : `${Math.round(n / 10_000).toLocaleString()}만`;
+    return `${(n / 100_000_000).toFixed(1)}억`;
   }
   if (n >= 10_000) return `${Math.round(n / 10_000).toLocaleString()}만`;
   return n.toLocaleString();

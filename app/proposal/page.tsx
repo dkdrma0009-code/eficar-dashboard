@@ -55,7 +55,7 @@ export default function ProposalPage() {
       itemMap.set(cat, (itemMap.get(cat) ?? 0) + r.amount);
     });
     const topItems = [...itemMap.entries()].sort((a, b) => b[1] - a[1]).slice(0, 4).map(([n]) => n);
-    const missingItems = ALL_ITEMS.filter(item => !topItems.some(t => t.includes(item.replace('/타이어', '').replace('/렌즈', ''))));
+    const missingItems = ALL_ITEMS.filter(item => !topItems.some(t => t.startsWith(item.split('/')[0])));
     return { currentMonth, currentSales, prevSales, growthRate, totalSales, monthsActive, topItems, missingItems };
   }, [data, selectedCustomer]);
 

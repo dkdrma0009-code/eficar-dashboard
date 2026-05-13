@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import './globals.css';
 import Providers from './providers';
 import AppHeader from '@/components/AppHeader';
+import ErrorBoundary from '@/components/ErrorBoundary';
 
 export const metadata: Metadata = {
   title: '에픽카 마케팅 대시보드',
@@ -18,8 +19,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body style={{ fontFamily: "'Pretendard', -apple-system, sans-serif", background: '#F8F9FA' }}>
         <Providers>
-          <AppHeader />
-          {children}
+          <ErrorBoundary>
+            <AppHeader />
+            {children}
+          </ErrorBoundary>
         </Providers>
       </body>
     </html>

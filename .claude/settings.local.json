@@ -4,7 +4,8 @@
       "PowerShell(Get-ChildItem \"c:\\\\eficar-dashboard\" -ErrorAction SilentlyContinue; if \\(-not \\(Test-Path \"c:\\\\eficar-dashboard\"\\)\\) { \"Directory does not exist\" })",
       "Read(//c/managebe/**)",
       "Bash(npm install *)",
-      "PowerShell(Invoke-RestMethod -Uri \"http://localhost:3000/api/notion-devlog\" -Method POST -ContentType \"application/json\" -Body \"{}\")"
+      "PowerShell(Invoke-RestMethod -Uri \"http://localhost:3000/api/notion-devlog\" -Method POST -ContentType \"application/json\" -Body \"{}\")",
+      "Bash(git push *)"
     ],
     "additionalDirectories": [
       "c:\\managebe\\src\\app\\(advertiser)\\proposal\\new",

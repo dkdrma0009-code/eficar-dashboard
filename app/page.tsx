@@ -32,6 +32,7 @@ export default function Home() {
     setError(null);
     try {
       const res = await fetch('/sample-data.xlsx');
+      if (!res.ok) throw new Error('샘플 파일을 불러올 수 없습니다');
       const blob = await res.blob();
       const file = new File([blob], 'sample-data.xlsx', { type: blob.type });
       const records = await parseExcelFile(file);

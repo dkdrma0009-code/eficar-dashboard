@@ -400,7 +400,7 @@ export default function ContentPage() {
     } finally {
       setAiLoading(false);
     }
-  }, [contentData, contentType]);
+  }, [contentData, contentType, linkedProposal]);
 
   if (!data) {
     return (

@@ -51,6 +51,7 @@ export default function AIInsightsPanel({ data }: Props) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ month: formatMonth(month), customers }),
       });
+      if (!res.ok) throw new Error(`서버 오류 ${res.status}`);
       const json = await res.json();
       if (json.error) throw new Error(`${json.error} | RAW: "${String(json.raw ?? '').slice(0, 400)}"`);
       setInsights(json);

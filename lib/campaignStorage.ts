@@ -31,8 +31,9 @@ function fixDate(date: string): string {
   // Excel 시리얼 숫자(예: "46153.4007") → 'YYYY-MM-DD'
   const num = parseFloat(date);
   if (!isNaN(num) && num > 40000 && num < 60000) {
-    const d = new Date(Date.UTC(1899, 11, 30) + Math.floor(num) * 86400000);
-    return d.toISOString().slice(0, 10);
+    const ms = Math.round((Math.floor(num) - 25569) * 86400 * 1000);
+    const d = new Date(ms);
+    return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
   }
   return date;
 }
