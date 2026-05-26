@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import type { CardItem, CardFormInput, CardLayout } from '@/app/cardnews/types';
+import { correctParticlesDeep } from '@/lib/koreanParticles';
 
 export const runtime = 'nodejs';
 
@@ -98,6 +99,11 @@ ${LAYOUT_SCHEMA}
 - 텍스트 길이: headline 20자 이내, desc 30자 이내
 - cover의 highlight는 숫자+단위 형태 (예: "1.6억", "850%")
 - cta의 contact1은 반드시 "eficar@eficar.co.kr"
+
+【텍스트 규칙】
+- HTML 태그 절대 금지 (<br>, <b>, <strong> 등)
+- 줄바꿈이 필요하면 반드시 \\n 사용
+- 헤드라인은 15자 이내 권장, 최대 20자
 
 【출력 형식 — 순수 JSON만, 코드블록 금지】
 {"cards":[{"layout":"cover","data":{...}},{"layout":"big-number","data":{...}},...]}`
@@ -345,9 +351,9 @@ export async function POST(req: NextRequest) {
     // Return fallback deck
     const fallback = expectedSequence.map(makeFallback);
     console.warn('[ai-generate] Using fallback deck');
-    return NextResponse.json({ cards: fallback, _fallback: true });
+    return NextResponse.json({ cards: correctParticlesDeep(fallback), _fallback: true });
   }
 
   console.log(`[ai-generate] OK cards=${cards.length}`);
-  return NextResponse.json({ cards });
+  return NextResponse.json({ cards: correctParticlesDeep(cards) });
 }

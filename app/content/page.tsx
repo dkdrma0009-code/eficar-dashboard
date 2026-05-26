@@ -245,6 +245,16 @@ export default function ContentPage() {
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState('');
 
+  // LinkedIn 직접 게시 상태
+  const [liToken, setLiToken] = useState<string>('');
+  const [liPersonId, setLiPersonId] = useState<string>('');
+  const [liName, setLiName] = useState<string>('');
+  const [liImage, setLiImage] = useState<{ base64: string; mime: string; name: string } | null>(null);
+  const [liPosting, setLiPosting] = useState(false);
+  const [liPostFeedback, setLiPostFeedback] = useState('');
+  const [liEditMode, setLiEditMode] = useState(false);
+  const [liEditText, setLiEditText] = useState('');
+
   const availableMonths = data ? [...data.allMonths].reverse() : [];
   const selectedMonth = month || availableMonths[0] || '';
 
@@ -324,6 +334,70 @@ export default function ContentPage() {
     return m ? m[1].trim() : `[에픽카] ${contentData?.customer ?? ''} 파트너십 안내`;
   };
   const parseEmailBody = (text: string) => text.replace(/^제목:.*\n\n?/, '').trim();
+
+  // LinkedIn OAuth 팝업 로그인
+  const linkedInLogin = () => {
+    const popup = window.open('/api/linkedin/auth', 'linkedin-auth', 'width=600,height=700,scrollbars=yes');
+    const handler = (e: MessageEvent) => {
+      if (e.data?.type === 'LINKEDIN_AUTH_SUCCESS') {
+        setLiToken(e.data.accessToken);
+        setLiPersonId(e.data.personId);
+        setLiName(e.data.name);
+        window.removeEventListener('message', handler);
+        popup?.close();
+      } else if (e.data?.type === 'LINKEDIN_AUTH_ERROR') {
+        showFeedback('❌ LinkedIn 로그인 실패. 다시 시도해주세요.');
+        window.removeEventListener('message', handler);
+      }
+    };
+    window.addEventListener('message', handler);
+  };
+
+  // LinkedIn 직접 게시
+  const postToLinkedIn = async () => {
+    if (!liToken || !liPersonId) { linkedInLogin(); return; }
+    setLiPosting(true);
+    setLiPostFeedback('');
+    const text = liEditMode ? liEditText : activeText;
+    try {
+      const res = await fetch('/api/linkedin/post', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          accessToken: liToken,
+          personId: liPersonId,
+          text,
+          imageBase64: liImage?.base64,
+          imageMimeType: liImage?.mime,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setLiPostFeedback(`❌ ${data.error ?? '게시 실패'}`);
+      } else {
+        setLiPostFeedback('✅ LinkedIn에 게시됐습니다!');
+        logToCalendar('linkedin');
+        logToCampaign('linkedin');
+      }
+    } catch (e) {
+      setLiPostFeedback(`❌ ${String(e)}`);
+    } finally {
+      setLiPosting(false);
+    }
+  };
+
+  // LinkedIn 이미지 파일 선택
+  const handleLiImage = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result as string;
+      const base64 = result.split(',')[1];
+      setLiImage({ base64, mime: file.type, name: file.name });
+    };
+    reader.readAsDataURL(file);
+  };
 
   const sendLinkedIn = () => {
     const encoded = encodeURIComponent(activeText.slice(0, 700));
@@ -688,15 +762,70 @@ export default function ContentPage() {
                     </div>
                   )}
 
+                  {/* LinkedIn 이미지 첨부 + 편집 + 직접 게시 */}
+                  {contentType === 'linkedin' && activeText && (
+                    <div style={{ marginBottom: 12 }}>
+                      {/* 편집 모드 토글 */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                        <button
+                          onClick={() => { setLiEditMode(v => !v); setLiEditText(activeText); }}
+                          style={{ fontSize: 12, fontWeight: 700, padding: '5px 12px', borderRadius: 7, border: '1px solid #E2E8F0', background: liEditMode ? '#005957' : 'white', color: liEditMode ? 'white' : '#191F28', cursor: 'pointer' }}
+                        >
+                          ✏️ {liEditMode ? '편집 중' : '내용 편집'}
+                        </button>
+                        {liName && (
+                          <span style={{ fontSize: 12, color: '#00B386', fontWeight: 600 }}>✓ {liName} 연결됨</span>
+                        )}
+                      </div>
+
+                      {liEditMode && (
+                        <textarea
+                          value={liEditText}
+                          onChange={e => setLiEditText(e.target.value)}
+                          rows={8}
+                          style={{ width: '100%', padding: '10px 12px', border: '1px solid #005957', borderRadius: 8, fontSize: 13, fontFamily: 'inherit', resize: 'vertical', lineHeight: 1.6, marginBottom: 8 }}
+                        />
+                      )}
+
+                      {/* 이미지 첨부 */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderRadius: 7, border: '1px dashed #8B95A1', cursor: 'pointer', fontSize: 12, fontWeight: 600, color: '#8B95A1', background: 'white' }}>
+                          🖼️ 이미지 첨부
+                          <input type="file" accept="image/*" onChange={handleLiImage} style={{ display: 'none' }} />
+                        </label>
+                        {liImage && (
+                          <span style={{ fontSize: 12, color: '#005957', fontWeight: 600 }}>
+                            {liImage.name}
+                            <button onClick={() => setLiImage(null)} style={{ marginLeft: 6, color: '#8B95A1', background: 'none', border: 'none', cursor: 'pointer', fontSize: 14 }}>×</button>
+                          </span>
+                        )}
+                      </div>
+
+                      {/* 게시 버튼 */}
+                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                        <button
+                          onClick={postToLinkedIn}
+                          disabled={liPosting}
+                          style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 18px', borderRadius: 8, border: 'none', cursor: liPosting ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 700, background: '#0A66C2', color: 'white', opacity: liPosting ? 0.7 : 1 }}
+                        >
+                          {liPosting ? '게시 중...' : liToken ? '💼 LinkedIn에 바로 게시' : '💼 LinkedIn 로그인 후 게시'}
+                        </button>
+                      </div>
+                      {liPostFeedback && (
+                        <p style={{ marginTop: 8, fontSize: 12, fontWeight: 600, color: liPostFeedback.startsWith('✅') ? '#00B386' : '#EF4444' }}>{liPostFeedback}</p>
+                      )}
+                    </div>
+                  )}
+
                   {/* 채널별 전송 버튼 */}
                   <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                     {contentType === 'linkedin' && (
                       <button onClick={sendLinkedIn} style={{
                         display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px',
-                        borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 700,
-                        background: '#0A66C2', color: 'white', transition: 'all 0.15s',
+                        borderRadius: 8, border: '1px solid #E2E8F0', cursor: 'pointer', fontSize: 12, fontWeight: 600,
+                        background: 'white', color: '#8B95A1', transition: 'all 0.15s',
                       }}>
-                        <ExternalLink style={{ width: 14, height: 14 }} /> LinkedIn에 게시
+                        <ExternalLink style={{ width: 13, height: 13 }} /> 공유 창으로 열기
                       </button>
                     )}
                     {contentType === 'kakao' && (

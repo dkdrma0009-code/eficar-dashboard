@@ -120,7 +120,7 @@ export default function CoverLayout({ data, ratio, cardWidth = CARD_WIDTH }: Pro
           position: 'absolute',
           left: p,
           right: p,
-          top: cardHeight * 0.3,
+          top: cardHeight * 0.22,
         }}
       >
         {/* Accent line */}
