@@ -8,7 +8,7 @@ import { useMemo } from 'react';
 import {
   Zap, LayoutDashboard, Users, FileText, Sparkles,
   Image, BarChart2, Send, Calendar, BookOpen,
-  GitCompare,
+  GitCompare, Upload,
 } from 'lucide-react';
 
 const SECTIONS = [
