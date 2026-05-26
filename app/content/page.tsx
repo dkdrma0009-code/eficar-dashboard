@@ -4,6 +4,7 @@ import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Copy, Check, RefreshCw, Sparkles, Zap, ExternalLink, Send, Mail, BookOpen } from 'lucide-react';
 import { addLibraryItem } from '@/lib/libraryStorage';
+import { getCRMNote } from '@/lib/crmStorage';
 import { addCalendarEvent } from '@/lib/calendarStorage';
 import { addCampaign, getCampaigns } from '@/lib/campaignStorage';
 import { useDashboardData } from '@/lib/DataContext';
@@ -260,6 +261,13 @@ export default function ContentPage() {
   const [editMode, setEditMode] = useState(false);
   const [editText, setEditText] = useState('');
 
+  // 팝빌 SMS / 카카오 발송 상태
+  const [smsPhone, setSmsPhone] = useState('');
+  const [smsSending, setSmsSending] = useState(false);
+  const [smsFeedback, setSmsFeedback] = useState('');
+  const [kakaoSending, setKakaoSending] = useState(false);
+  const [kakaoFeedback, setKakaoFeedback] = useState('');
+
   // LinkedIn 직접 게시 상태
   const [liToken, setLiToken] = useState<string>('');
   const [liPersonId, setLiPersonId] = useState<string>('');
@@ -406,6 +414,75 @@ export default function ContentPage() {
       setLiImageGenerating(false);
     }
   }, [contentData]);
+
+  // CRM에서 첫 번째 담당자 번호 자동 로드
+  useEffect(() => {
+    if (customer && customer !== '__all__') {
+      const crm = getCRMNote(customer);
+      if (crm.contacts?.[0]?.phone) setSmsPhone(crm.contacts[0].phone);
+    }
+  }, [customer]);
+
+  // SMS 발송
+  const sendSMS = async () => {
+    if (!smsPhone || !activeText) return;
+    setSmsSending(true);
+    setSmsFeedback('');
+    try {
+      const res = await fetch('/api/popbill/sms', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          receiver: smsPhone.replace(/-/g, ''),
+          receiverName: contentData?.customer ?? '',
+          content: activeText,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setSmsFeedback(`❌ ${data.error}`);
+      } else {
+        setSmsFeedback(`✅ 문자 발송 완료 (${data.msgType})`);
+        logToCalendar('kakao');
+        logToCampaign('kakao');
+      }
+    } catch (e) {
+      setSmsFeedback(`❌ ${String(e)}`);
+    } finally {
+      setSmsSending(false);
+    }
+  };
+
+  // 카카오 친구톡 발송
+  const sendKakaoFriendTalk = async () => {
+    if (!smsPhone || !activeText) return;
+    setKakaoSending(true);
+    setKakaoFeedback('');
+    try {
+      const res = await fetch('/api/popbill/kakao', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          receiver: smsPhone.replace(/-/g, ''),
+          receiverName: contentData?.customer ?? '',
+          content: activeText,
+          altContent: activeText, // 친구톡 실패 시 SMS 대체
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setKakaoFeedback(`❌ ${data.error}`);
+      } else {
+        setKakaoFeedback('✅ 친구톡 발송 완료');
+        logToCalendar('kakao');
+        logToCampaign('kakao');
+      }
+    } catch (e) {
+      setKakaoFeedback(`❌ ${String(e)}`);
+    } finally {
+      setKakaoSending(false);
+    }
+  };
 
   // LinkedIn OAuth 팝업 로그인
   const linkedInLogin = () => {
@@ -913,6 +990,39 @@ export default function ContentPage() {
                       {liPostFeedback && (
                         <p style={{ marginTop: 8, fontSize: 12, fontWeight: 600, color: liPostFeedback.startsWith('✅') ? '#00B386' : '#EF4444' }}>{liPostFeedback}</p>
                       )}
+                    </div>
+                  )}
+
+                  {/* 팝빌 직접 발송 (SMS / 카카오 친구톡) */}
+                  {(contentType === 'kakao' || contentType === 'email') && activeText && (
+                    <div style={{ marginBottom: 12 }}>
+                      <p style={{ fontSize: 11, fontWeight: 700, color: '#8B95A1', marginBottom: 6 }}>📱 직접 발송</p>
+                      <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8, flexWrap: 'wrap' }}>
+                        <input
+                          value={smsPhone}
+                          onChange={e => setSmsPhone(e.target.value)}
+                          placeholder="01012345678"
+                          style={{ padding: '7px 10px', border: '1px solid #E2E8F0', borderRadius: 7, fontSize: 13, width: 150, fontFamily: 'inherit' }}
+                        />
+                        {contentType === 'kakao' && (
+                          <button
+                            onClick={sendKakaoFriendTalk}
+                            disabled={kakaoSending || !smsPhone}
+                            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 7, border: 'none', cursor: kakaoSending || !smsPhone ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 700, background: '#FEE500', color: '#191F28', opacity: kakaoSending || !smsPhone ? 0.5 : 1 }}
+                          >
+                            {kakaoSending ? '발송 중...' : '💬 친구톡 발송'}
+                          </button>
+                        )}
+                        <button
+                          onClick={sendSMS}
+                          disabled={smsSending || !smsPhone}
+                          style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 7, border: '1px solid #E2E8F0', cursor: smsSending || !smsPhone ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 700, background: 'white', color: '#191F28', opacity: smsSending || !smsPhone ? 0.5 : 1 }}
+                        >
+                          {smsSending ? '발송 중...' : '📨 문자 발송'}
+                        </button>
+                      </div>
+                      {kakaoFeedback && <p style={{ fontSize: 12, fontWeight: 600, color: kakaoFeedback.startsWith('✅') ? '#00B386' : '#EF4444', marginBottom: 4 }}>{kakaoFeedback}</p>}
+                      {smsFeedback && <p style={{ fontSize: 12, fontWeight: 600, color: smsFeedback.startsWith('✅') ? '#00B386' : '#EF4444' }}>{smsFeedback}</p>}
                     </div>
                   )}
 

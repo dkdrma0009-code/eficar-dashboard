@@ -22,6 +22,7 @@
     "mammoth": "^1.12.0",
     "next": "^16.2.5",
     "pdf-parse": "^2.4.5",
+    "popbill": "^1.64.0",
     "pptxgenjs": "^4.0.1",
     "react": "^18",
     "react-dom": "^18",

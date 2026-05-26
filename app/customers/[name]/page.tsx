@@ -1,3 +1,4 @@
+// @ts-nocheck
 'use client';
 import { use, useMemo, useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';

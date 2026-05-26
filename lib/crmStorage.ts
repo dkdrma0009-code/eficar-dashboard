@@ -1,9 +1,16 @@
 const CRM_KEY = 'eficar-crm';
 
+export interface ContactPerson {
+  name: string;
+  phone: string;  // 01012345678 형식
+  role?: string;
+}
+
 export interface CRMNote {
   lastContact: string;  // 'YYYY-MM-DD'
   nextMeeting: string;  // 'YYYY-MM-DD'
   memo: string;
+  contacts?: ContactPerson[];
 }
 
 type CRMData = Record<string, CRMNote>;
@@ -15,7 +22,7 @@ function load(): CRMData {
 }
 
 export function getCRMNote(customer: string): CRMNote {
-  return load()[customer] ?? { lastContact: '', nextMeeting: '', memo: '' };
+  return load()[customer] ?? { lastContact: '', nextMeeting: '', memo: '', contacts: [] };
 }
 
 export function setCRMNote(customer: string, note: CRMNote): void {
