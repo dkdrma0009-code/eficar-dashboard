@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { correctKoreanParticles } from '@/lib/koreanParticles';
 
 export const runtime = 'nodejs';
 
@@ -119,5 +120,5 @@ ${typeFormats[type] ?? '충분히 길고 상세하게 작성'}
   const result = await res.json();
   const parts: { text?: string; thought?: boolean }[] = result.candidates?.[0]?.content?.parts ?? [];
   const text: string = parts.filter(p => !p.thought).map(p => p.text ?? '').join('');
-  return NextResponse.json({ text });
+  return NextResponse.json({ text: correctKoreanParticles(text) });
 }
