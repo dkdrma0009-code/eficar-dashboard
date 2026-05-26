@@ -1,7 +1,7 @@
 'use client';
 import { TrendingUp, TrendingDown, BarChart2, Users, ShoppingCart, Activity } from 'lucide-react';
 import { useCountUp } from '@/hooks/useCountUp';
-import { formatCurrency, formatPercent } from '@/lib/dataUtils';
+import { formatCurrency } from '@/lib/dataUtils';
 import type { ViewData } from '@/lib/types';
 
 function KPICard({ label, rawValue, displayFn, sub, growth, icon: Icon, accentColor }: {
@@ -66,7 +66,7 @@ export default function KPICards({ viewData }: { viewData: ViewData }) {
   const { totalCurrentSales, totalPrevSales, growthRate, transactionCount, activeCustomers, selectedMonth, prevMonth, isLatestMonth, mtdInfo } = viewData;
 
   const salesLabel = isLatestMonth && mtdInfo
-    ? `${selectedMonth.slice(5)}월 ${mtdInfo.todayDay}일 기준`
+    ? `${selectedMonth.slice(5)}월 ${mtdInfo.todayDay}일 기준 (MTD)`
     : '이번 달 매출';
 
   const salesSub = isLatestMonth && mtdInfo
@@ -74,11 +74,11 @@ export default function KPICards({ viewData }: { viewData: ViewData }) {
     : `전월 ${formatCurrency(totalPrevSales)}원`;
 
   const growthLabel = isLatestMonth && mtdInfo
-    ? '일평균 기준 전월 대비'
+    ? '전월 동기(MTD) 대비'
     : '전월 대비 증감률';
 
   const growthSub = isLatestMonth && mtdInfo
-    ? `일평균 ${formatCurrency(mtdInfo.dailyRate)}원 vs 전월 ${formatCurrency(mtdInfo.prevDailyRate)}원`
+    ? `이달 ${mtdInfo.todayDay}일 ${formatCurrency(totalCurrentSales)}원 vs 전월 동기 ${formatCurrency(mtdInfo.prevMtdSales)}원`
     : `${prevMonth} → ${selectedMonth}`;
 
   return (

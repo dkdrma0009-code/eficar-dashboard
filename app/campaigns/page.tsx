@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { Plus, X, Check, Send, Upload, AlertCircle, Bell, Mail, Clock } from 'lucide-react';
+import { Plus, X, Check, Send, Upload, AlertCircle, Bell, Mail, Clock, Brain, TrendingUp, TrendingDown } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { getCampaigns, addCampaign, updateCampaign, deleteCampaign, isDuplicateCampaign, type CampaignRecord, type CampaignChannel, type CampaignOutcome } from '@/lib/campaignStorage';
 import { useDashboardData } from '@/lib/DataContext';
@@ -367,6 +367,48 @@ export default function CampaignsPage() {
             </div>
           </div>
         )}
+
+        {/* AI Campaign Intelligence */}
+        {records.length > 0 && (() => {
+          const closedCount = records.filter(r => r.outcome === 'closed').length;
+          const meetingCount = records.filter(r => r.outcome === 'meeting' || r.outcome === 'proposal' || r.outcome === 'closed').length;
+          const channelPerf = CHANNELS.map(ch => {
+            const recs = records.filter(r => r.channel === ch.value);
+            const conv = recs.filter(r => r.outcome === 'meeting' || r.outcome === 'proposal' || r.outcome === 'closed').length;
+            return { ...ch, total: recs.length, conv, rate: recs.length > 0 ? Math.round((conv / recs.length) * 100) : 0 };
+          }).filter(c => c.total > 0).sort((a, b) => b.rate - a.rate);
+          const bestChannel = channelPerf[0];
+          const worstChannel = channelPerf[channelPerf.length - 1];
+          const insights: { icon: string; text: string; sub: string; positive: boolean }[] = [];
+          if (bestChannel && bestChannel.rate > 0) insights.push({ icon: '🏆', text: `${bestChannel.label} 채널 전환율 ${bestChannel.rate}%로 최고`, sub: `${bestChannel.total}건 발송 → ${bestChannel.conv}건 전환`, positive: true });
+          if (conversionRate >= 30) insights.push({ icon: '🚀', text: `전체 미팅 전환율 ${conversionRate}% — 목표 초과`, sub: `${meetingCount}건 미팅/제안/완료`, positive: true });
+          else if (conversionRate > 0) insights.push({ icon: '📈', text: `전환율 ${conversionRate}% — 개선 여지 있음`, sub: '반응 고객에게 빠른 팔로업 권장', positive: false });
+          if (closedCount > 0) insights.push({ icon: '✅', text: `성과 완료 ${closedCount}건 — 우수한 클로징`, sub: '클로징 성공 템플릿을 재사용하세요', positive: true });
+          if (overdue.length > 0) insights.push({ icon: '⏰', text: `팔로업 미응답 ${overdue.length}건 리스크`, sub: `평균 ${Math.round(overdue.reduce((s, r) => s + r.daysSince, 0) / overdue.length)}일 경과`, positive: false });
+          if (worstChannel && worstChannel !== bestChannel && worstChannel.total >= 2) insights.push({ icon: '💡', text: `${worstChannel.label} 채널 전환율 ${worstChannel.rate}%로 최저`, sub: '채널 전략 재검토 필요', positive: false });
+          if (insights.length === 0) return null;
+          return (
+            <div style={{ marginBottom: 20, padding: '16px 20px', background: 'white', border: '1px solid #E6F2F2', borderRadius: 12 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+                <Brain style={{ width: 15, height: 15, color: '#005957' }} />
+                <span style={{ fontSize: 13, fontWeight: 700, color: '#191F28' }}>AI 캠페인 인사이트</span>
+                <span style={{ marginLeft: 'auto', fontSize: 11, color: '#8B95A1' }}>총 {records.length}건 분석</span>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 10 }}>
+                {insights.slice(0, 4).map((ins, i) => (
+                  <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '10px 12px', borderRadius: 10, background: ins.positive ? '#F0FDF4' : '#FFFBEB', border: `1px solid ${ins.positive ? '#86EFAC' : '#FDE68A'}` }}>
+                    <span style={{ fontSize: 16, lineHeight: 1, flexShrink: 0, marginTop: 1 }}>{ins.icon}</span>
+                    <div>
+                      <p style={{ fontSize: 12, fontWeight: 700, color: ins.positive ? '#166534' : '#92400E', margin: 0, marginBottom: 2 }}>{ins.text}</p>
+                      <p style={{ fontSize: 11, color: '#8B95A1', margin: 0 }}>{ins.sub}</p>
+                    </div>
+                    {ins.positive ? <TrendingUp style={{ width: 12, height: 12, color: '#16A34A', flexShrink: 0, marginLeft: 'auto', marginTop: 2 }} /> : <TrendingDown style={{ width: 12, height: 12, color: '#D97706', flexShrink: 0, marginLeft: 'auto', marginTop: 2 }} />}
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })()}
 
         {/* 이메일 발송 결과 */}
         {emailResult && (

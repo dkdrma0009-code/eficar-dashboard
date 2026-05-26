@@ -1,6 +1,6 @@
 'use client';
 import { useState, useMemo, useEffect } from 'react';
-import { Sparkles, Copy, Check, AlertTriangle, TrendingUp, FileText, Pencil, X } from 'lucide-react';
+import { Sparkles, Copy, Check, AlertTriangle, TrendingUp, TrendingDown, FileText, Pencil, X, Brain } from 'lucide-react';
 import { useDashboardData } from '@/lib/DataContext';
 import { getCampaigns } from '@/lib/campaignStorage';
 import { categorizeProduct } from '@/lib/dataUtils';
@@ -184,6 +184,54 @@ export default function ProposalPage() {
           </div>
         )}
       </div>
+
+      {/* AI Strategy Intelligence */}
+      {customerData && selectedCustomer && (
+        <div style={{ marginBottom: 20, padding: '16px 20px', background: 'white', border: '1px solid #E6F2F2', borderRadius: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+            <Brain style={{ width: 15, height: 15, color: '#005957' }} />
+            <span style={{ fontSize: 13, fontWeight: 700, color: '#191F28' }}>AI 전략 인텔리전스</span>
+            <span style={{ marginLeft: 'auto', fontSize: 11, color: '#8B95A1' }}>제안서 작성 전 참고하세요</span>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            {/* 추천 전략 */}
+            <div style={{ padding: '12px 14px', borderRadius: 10, background: customerData.growthRate >= 0 ? '#F0FDF4' : '#FFFBEB', border: `1px solid ${customerData.growthRate >= 0 ? '#86EFAC' : '#FDE68A'}` }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+                {customerData.growthRate >= 0
+                  ? <TrendingUp style={{ width: 13, height: 13, color: '#16A34A' }} />
+                  : <TrendingDown style={{ width: 13, height: 13, color: '#D97706' }} />}
+                <span style={{ fontSize: 12, fontWeight: 700, color: customerData.growthRate >= 0 ? '#166534' : '#92400E' }}>
+                  {customerData.growthRate > 15 ? '모멘텀 극대화 전략' : customerData.growthRate >= 0 ? '안정 유지 전략' : '관계 회복 전략'}
+                </span>
+              </div>
+              <p style={{ fontSize: 12, color: '#4B5563', lineHeight: 1.5 }}>
+                {customerData.growthRate > 15
+                  ? `성장세(+${customerData.growthRate.toFixed(0)}%) 활용 — 추가 품목 확대와 장기 파트너십 강조가 효과적입니다.`
+                  : customerData.growthRate >= 0
+                  ? '안정적 거래 관계를 유지하며 미도입 품목 중심으로 추가 수요를 발굴하세요.'
+                  : `감소세(${customerData.growthRate.toFixed(0)}%) 대응 — 비용 절감 효과와 구체적 수치로 관계를 재점화하세요.`}
+              </p>
+            </div>
+
+            {/* 핵심 어필 포인트 */}
+            <div style={{ padding: '12px 14px', borderRadius: 10, background: '#F8F9FA', border: '1px solid #F2F4F6' }}>
+              <p style={{ fontSize: 12, fontWeight: 700, color: '#191F28', marginBottom: 8 }}>핵심 어필 포인트</p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                {[
+                  customerData.monthsActive >= 6 ? `${customerData.monthsActive}개월 장기 파트너 — 신뢰도 어필` : '신규 거래 — 온보딩 가치 강조',
+                  customerData.missingItems.length > 0 ? `미도입 ${customerData.missingItems.length}개 품목 — 크로스셀 기회` : '전 품목 도입 — 볼륨 업셀 시도',
+                  /렌터카|렌탈|그린카/i.test(selectedCustomer) ? '렌터카 특화 — 공급 안정성 메시지' : /화재|보험/i.test(selectedCustomer) ? '보험사 특화 — 비용 절감 KPI' : '파트너십 기반 협력 강조',
+                ].map((point, i) => (
+                  <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 6 }}>
+                    <span style={{ fontSize: 10, color: '#005957', fontWeight: 800, marginTop: 2, flexShrink: 0 }}>▸</span>
+                    <span style={{ fontSize: 12, color: '#374151', lineHeight: 1.4 }}>{point}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {error && (
         <div style={{ padding: '12px 16px', background: '#FEF2F2', borderRadius: 10, border: '1px solid #FECACA', color: '#DC2626', fontSize: 13, marginBottom: 16 }}>{error}</div>

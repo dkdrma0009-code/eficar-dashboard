@@ -12,6 +12,8 @@ import {
   formatCurrency, formatCurrencyFull, formatPercent, formatMonth,
 } from '@/lib/dataUtils';
 import type { DashboardData } from '@/lib/types';
+import CardCanvas from '@/app/cardnews/components/CardCanvas';
+import type { CardItem } from '@/app/cardnews/types';
 
 const SAVINGS_RATE = 0.30;
 
@@ -215,6 +217,15 @@ ${blockText}`;
   return [v0, v1][version % 2];
 }
 
+function stripMarkdown(text: string): string {
+  return text
+    .replace(/\*\*(.+?)\*\*/g, '$1')   // **bold** → bold
+    .replace(/\*\s{0,3}([^\n*])/g, '• $1') // *   item → • item
+    .replace(/__(.+?)__/g, '$1')        // __bold__ → bold
+    .replace(/^#+\s+/gm, '')           // ### heading → heading
+    .replace(/_(.+?)_/g, '$1');         // _italic_ → italic
+}
+
 export default function ContentPage() {
   const { data } = useDashboardData();
   const router = useRouter();
@@ -245,6 +256,10 @@ export default function ContentPage() {
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState('');
 
+  // 콘텐츠 편집 상태
+  const [editMode, setEditMode] = useState(false);
+  const [editText, setEditText] = useState('');
+
   // LinkedIn 직접 게시 상태
   const [liToken, setLiToken] = useState<string>('');
   const [liPersonId, setLiPersonId] = useState<string>('');
@@ -252,8 +267,8 @@ export default function ContentPage() {
   const [liImage, setLiImage] = useState<{ base64: string; mime: string; name: string } | null>(null);
   const [liPosting, setLiPosting] = useState(false);
   const [liPostFeedback, setLiPostFeedback] = useState('');
-  const [liEditMode, setLiEditMode] = useState(false);
-  const [liEditText, setLiEditText] = useState('');
+  const [liCardForExport, setLiCardForExport] = useState<CardItem | null>(null);
+  const [liImageGenerating, setLiImageGenerating] = useState(false);
 
   const availableMonths = data ? [...data.allMonths].reverse() : [];
   const selectedMonth = month || availableMonths[0] || '';
@@ -276,7 +291,15 @@ export default function ContentPage() {
     setEmphasis(prev => prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]);
   };
 
-  const activeText = aiMode && aiText ? aiText : generated;
+  const rawActiveText = aiMode && aiText ? aiText : generated;
+
+  // 편집 모드로 진입하면 현재 텍스트를 편집창으로 복사
+  const handleEditToggle = () => {
+    if (!editMode) setEditText(stripMarkdown(rawActiveText));
+    setEditMode(v => !v);
+  };
+
+  const activeText = editMode ? editText : rawActiveText;
 
   const logToCalendar = (channel: 'linkedin' | 'kakao' | 'email') => {
     const today = new Date().toISOString().slice(0, 10);
@@ -335,6 +358,55 @@ export default function ContentPage() {
   };
   const parseEmailBody = (text: string) => text.replace(/^제목:.*\n\n?/, '').trim();
 
+  // LinkedIn 카드 이미지 자동 생성
+  const generateLinkedInImage = useCallback(async () => {
+    if (!contentData) return;
+    setLiImageGenerating(true);
+
+    let card: CardItem;
+    const customerLabel = contentData.customer === '전체 고객사' ? '에픽카 파트너' : contentData.customer;
+
+    if (contentData.growthStr) {
+      card = {
+        layout: 'big-number',
+        data: {
+          tag: customerLabel,
+          number: contentData.growthStr,
+          unit: '매출 성장',
+          desc: `${contentData.todayLabel} 에픽카 공급 성과`,
+        },
+      };
+    } else {
+      card = {
+        layout: 'cover',
+        data: {
+          badge: `에픽카 × ${customerLabel}`,
+          headline: `${contentData.monthsActive}개월 파트너십 성과`,
+          subheadline: contentData.totalSales,
+          highlight: contentData.topItem,
+        },
+      };
+    }
+
+    setLiCardForExport(card);
+    await new Promise(r => setTimeout(r, 400));
+
+    const el = document.getElementById('li-card-export');
+    if (!el) { setLiImageGenerating(false); setLiCardForExport(null); return; }
+
+    try {
+      const html2canvas = (await import('html2canvas')).default;
+      const canvas = await html2canvas(el, { scale: 2, useCORS: true, backgroundColor: null });
+      const base64 = canvas.toDataURL('image/png').split(',')[1];
+      setLiImage({ base64, mime: 'image/png', name: `linkedin-${customerLabel}.png` });
+    } catch (e) {
+      console.error('이미지 생성 실패:', e);
+    } finally {
+      setLiCardForExport(null);
+      setLiImageGenerating(false);
+    }
+  }, [contentData]);
+
   // LinkedIn OAuth 팝업 로그인
   const linkedInLogin = () => {
     const popup = window.open('/api/linkedin/auth', 'linkedin-auth', 'width=600,height=700,scrollbars=yes');
@@ -358,7 +430,7 @@ export default function ContentPage() {
     if (!liToken || !liPersonId) { linkedInLogin(); return; }
     setLiPosting(true);
     setLiPostFeedback('');
-    const text = liEditMode ? liEditText : activeText;
+    const text = activeText;
     try {
       const res = await fetch('/api/linkedin/post', {
         method: 'POST',
@@ -682,22 +754,53 @@ export default function ContentPage() {
                 </div>
               )}
 
+              {/* 편집 토글 버튼 */}
+              {rawActiveText && !aiLoading && (
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 6 }}>
+                  <button
+                    onClick={handleEditToggle}
+                    style={{
+                      fontSize: 12, fontWeight: 600, padding: '4px 10px', borderRadius: 6,
+                      border: `1px solid ${editMode ? '#005957' : '#E5E7EB'}`,
+                      background: editMode ? '#E6F2F2' : 'white',
+                      color: editMode ? '#005957' : '#6B7280', cursor: 'pointer',
+                    }}
+                  >
+                    {editMode ? '✅ 편집 완료' : '✏️ 직접 편집'}
+                  </button>
+                </div>
+              )}
+
               <div style={{
-                flex: 1, background: '#F8F9FA', borderRadius: 12, padding: '20px',
+                flex: 1, background: '#F8F9FA', borderRadius: 12,
+                padding: editMode ? 0 : '20px',
                 fontSize: 14, lineHeight: 1.9, color: '#191F28',
                 minHeight: 360,
-                border: `1px solid ${aiMode && aiText ? '#005957' : '#F2F4F6'}`,
+                border: `1px solid ${editMode ? '#005957' : (aiMode && aiText ? '#005957' : '#F2F4F6')}`,
+                overflow: 'hidden',
               }}>
                 {aiMode && aiLoading ? (
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 12, color: '#8B95A1' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 12, color: '#8B95A1', padding: '20px' }}>
                     <div style={{ width: 36, height: 36, border: '3px solid #E6F2F2', borderTopColor: '#005957', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
                     <span style={{ fontSize: 13 }}>AI가 문구를 작성하고 있습니다...</span>
                   </div>
-                ) : activeText ? (
+                ) : editMode ? (
+                  <textarea
+                    value={editText}
+                    onChange={e => setEditText(e.target.value)}
+                    style={{
+                      width: '100%', height: '100%', minHeight: 360,
+                      border: 'none', outline: 'none', resize: 'vertical',
+                      background: 'transparent', padding: '20px',
+                      fontSize: 14, lineHeight: 1.9, color: '#191F28',
+                      fontFamily: 'inherit', boxSizing: 'border-box',
+                    }}
+                  />
+                ) : rawActiveText ? (
                   <div style={{ whiteSpace: 'pre-wrap' }}>
-                    {activeText.split('\n').map((line, i) => {
+                    {stripMarkdown(rawActiveText).split('\n').map((line, i) => {
                       const emphEmojis: Record<string, string> = { growth: '📈', savings: '💰', expand: '🔧', newpropo: '🆕', total: '📊' };
-                      const isHighlighted = emphasis.length > 0 && emphasis.some(key => line.startsWith(emphEmojis[key] ?? '\x00'));
+                      const isHighlighted = emphasis.length > 0 && emphasis.some(key => line.startsWith(emphEmojis[key] ?? ' '));
                       return (
                         <span key={i} style={{
                           display: 'block',
@@ -762,35 +865,31 @@ export default function ContentPage() {
                     </div>
                   )}
 
-                  {/* LinkedIn 이미지 첨부 + 편집 + 직접 게시 */}
+                  {/* LinkedIn 이미지 첨부 + 직접 게시 */}
                   {contentType === 'linkedin' && activeText && (
                     <div style={{ marginBottom: 12 }}>
-                      {/* 편집 모드 토글 */}
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                        <button
-                          onClick={() => { setLiEditMode(v => !v); setLiEditText(activeText); }}
-                          style={{ fontSize: 12, fontWeight: 700, padding: '5px 12px', borderRadius: 7, border: '1px solid #E2E8F0', background: liEditMode ? '#005957' : 'white', color: liEditMode ? 'white' : '#191F28', cursor: 'pointer' }}
-                        >
-                          ✏️ {liEditMode ? '편집 중' : '내용 편집'}
-                        </button>
-                        {liName && (
+                      {liName && (
+                        <div style={{ marginBottom: 8 }}>
                           <span style={{ fontSize: 12, color: '#00B386', fontWeight: 600 }}>✓ {liName} 연결됨</span>
-                        )}
-                      </div>
-
-                      {liEditMode && (
-                        <textarea
-                          value={liEditText}
-                          onChange={e => setLiEditText(e.target.value)}
-                          rows={8}
-                          style={{ width: '100%', padding: '10px 12px', border: '1px solid #005957', borderRadius: 8, fontSize: 13, fontFamily: 'inherit', resize: 'vertical', lineHeight: 1.6, marginBottom: 8 }}
-                        />
+                        </div>
                       )}
 
                       {/* 이미지 첨부 */}
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
+                        <button
+                          onClick={generateLinkedInImage}
+                          disabled={liImageGenerating || !contentData}
+                          style={{
+                            display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px',
+                            borderRadius: 7, border: '1px solid #005957', cursor: liImageGenerating ? 'not-allowed' : 'pointer',
+                            fontSize: 12, fontWeight: 600, color: '#005957', background: '#E6F2F2',
+                            opacity: liImageGenerating ? 0.6 : 1,
+                          }}
+                        >
+                          {liImageGenerating ? '⏳ 생성 중...' : '🎨 카드 이미지 자동 생성'}
+                        </button>
                         <label style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderRadius: 7, border: '1px dashed #8B95A1', cursor: 'pointer', fontSize: 12, fontWeight: 600, color: '#8B95A1', background: 'white' }}>
-                          🖼️ 이미지 첨부
+                          🖼️ 직접 첨부
                           <input type="file" accept="image/*" onChange={handleLiImage} style={{ display: 'none' }} />
                         </label>
                         {liImage && (
@@ -901,6 +1000,15 @@ export default function ContentPage() {
           </div>
         </div>
       </div>
+      {/* LinkedIn 카드 이미지 생성용 숨김 캔버스 */}
+      {liCardForExport && (
+        <div
+          id="li-card-export"
+          style={{ position: 'fixed', top: -9999, left: -9999, pointerEvents: 'none' }}
+        >
+          <CardCanvas card={liCardForExport} ratio="4:5" forExport />
+        </div>
+      )}
     </main>
   );
 }

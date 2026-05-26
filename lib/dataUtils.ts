@@ -3,6 +3,7 @@ import type {
   MonthlyData, ProductData, CustomerMonthlyData,
   AtRiskCustomer, ViewData, DashboardData,
 } from './types';
+import { buildTrendMap } from './trendIntelligence';
 
 export const CHART_COLORS = [
   '#005957', '#00B386', '#3B82F6', '#F59E0B', '#8B5CF6',
@@ -31,7 +32,7 @@ function getPrevMonth(month: string): string {
   return `${y}-${String(m - 1).padStart(2, '0')}`;
 }
 
-function getDaysInMonth(ym: string): number {
+export function getDaysInMonth(ym: string): number {
   const [y, m] = ym.split('-').map(Number);
   return new Date(y, m, 0).getDate();
 }
@@ -123,8 +124,9 @@ export function computeViewData(
     const dailyRate = todayDay > 0 ? Math.round(totalCurrentSales / todayDay) : 0;
     const prevDailyRate = daysInPrevMonth > 0 ? totalPrevSales / daysInPrevMonth : 0;
     const projectedSales = Math.round(dailyRate * daysInMonth);
+    const prevMtdSales = Math.round(prevDailyRate * todayDay);
     growthRate = prevDailyRate > 0 ? ((dailyRate - prevDailyRate) / prevDailyRate) * 100 : 0;
-    mtdInfo = { todayDay, daysInMonth, dailyRate, projectedSales, prevDailyRate: Math.round(prevDailyRate) };
+    mtdInfo = { todayDay, daysInMonth, dailyRate, projectedSales, prevDailyRate: Math.round(prevDailyRate), prevMtdSales };
   } else {
     growthRate = totalPrevSales === 0 ? 0 : ((totalCurrentSales - totalPrevSales) / totalPrevSales) * 100;
   }
@@ -142,10 +144,12 @@ export function computeViewData(
     const cs = cur.reduce((s, r) => s + r.amount, 0);
     const ps = prev.reduce((s, r) => s + r.amount, 0);
     let growth: number;
+    let prevMtdSales: number | undefined;
     if (isLatestMonth) {
       const cDaily = todayDay > 0 ? cs / todayDay : 0;
       const pDaily = daysInPrevMonth > 0 ? ps / daysInPrevMonth : 0;
       growth = pDaily > 0 ? ((cDaily - pDaily) / pDaily) * 100 : (cs > 0 ? 100 : 0);
+      prevMtdSales = Math.round(pDaily * todayDay);
     } else {
       growth = ps === 0 ? (cs > 0 ? 100 : 0) : ((cs - ps) / ps) * 100;
     }
@@ -154,6 +158,7 @@ export function computeViewData(
       grade: getCustomerGrade(cs, ps, growth),
       currentMonthSales: cs,
       prevMonthSales: ps,
+      prevMtdSales,
       growthRate: growth,
       totalSales: records.filter(r => r.service === name).reduce((s, r) => s + r.amount, 0),
       transactionCount: cur.length,
@@ -219,12 +224,17 @@ export function computeViewData(
     }
   }
 
+  const allMonths = [...new Set(records.map(r => r.date))].sort();
+  const trendMap = buildTrendMap(records, customers, allMonths, selectedMonth);
+
   return {
     selectedMonth, prevMonth,
     totalCurrentSales, totalPrevSales, growthRate,
+    totalPrevMtdSales: mtdInfo?.prevMtdSales,
     transactionCount, activeCustomers,
     customerStats, productData, atRiskCustomers, insights, isLatestMonth,
     mvpCustomer, actionCustomer, opportunityCustomer, mtdInfo,
+    trendMap,
   };
 }
 

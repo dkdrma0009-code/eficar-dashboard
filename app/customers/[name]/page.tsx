@@ -6,12 +6,34 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, Cell,
 } from 'recharts';
-import { ArrowLeft, TrendingUp, TrendingDown, Target, Send, FileText, Plus, ChevronRight } from 'lucide-react';
+import { ArrowLeft, TrendingUp, TrendingDown, Target, Send, FileText, Plus, ChevronRight, Brain } from 'lucide-react';
 import { useDashboardData } from '@/lib/DataContext';
 import { getCampaigns } from '@/lib/campaignStorage';
 import { getGoal, setGoal } from '@/lib/goalsStorage';
 import { categorizeProduct, GRADE_CONFIG } from '@/lib/dataUtils';
+import { computeHealthScore, computePredictiveAlerts } from '@/lib/intelligenceEngine';
+import { getProfile } from '@/lib/relationshipStorage';
+import { getMemory } from '@/lib/aiMemoryStorage';
+import { getActivities } from '@/lib/activityStorage';
+import QuickGenerateDrawer from '@/components/QuickGenerateDrawer';
 import type { CampaignRecord } from '@/lib/campaignStorage';
+import type { ActivityItem } from '@/lib/activityStorage';
+import type { CustomerStats, CustomerGrade } from '@/lib/types';
+
+function HealthRing({ score, color, size = 52 }: { score: number; color: string; size?: number }) {
+  const r = (size / 2) - 5;
+  const circ = 2 * Math.PI * r;
+  const offset = circ - (score / 100) * circ;
+  return (
+    <svg width={size} height={size} style={{ flexShrink: 0 }}>
+      <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="#F2F4F6" strokeWidth={4} />
+      <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={color} strokeWidth={4}
+        strokeDasharray={circ} strokeDashoffset={offset} strokeLinecap="round"
+        transform={`rotate(-90 ${size / 2} ${size / 2})`} style={{ transition: 'stroke-dashoffset 0.6s ease' }} />
+      <text x={size / 2} y={size / 2 + 4} textAnchor="middle" fontSize={size < 40 ? 9 : 11} fontWeight={800} fill="#191F28">{score}</text>
+    </svg>
+  );
+}
 
 const SLUG_MATCH: Record<string, (n: string) => boolean> = {
   sk:    (n) => /sk/i.test(n),
@@ -59,6 +81,10 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ name:
   const [editingGoal, setEditingGoal] = useState(false);
   const [campaignFilter, setCampaignFilter] = useState<string>('all');
   const [showAllCampaigns, setShowAllCampaigns] = useState(false);
+  const [activities, setActivities] = useState<ActivityItem[]>([]);
+  const [drawer, setDrawer] = useState<'message' | 'proposal' | null>(null);
+  const [relProfile, setRelProfile] = useState<ReturnType<typeof getProfile>>(null);
+  const [aiMemory, setAiMemory] = useState<ReturnType<typeof getMemory>>(null);
 
   const matcher = SLUG_MATCH[slug];
 
@@ -74,6 +100,9 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ name:
     const g = getGoal(customerName);
     setGoalState(g);
     setGoalInput(g > 0 ? String(Math.round(g / 10000)) : '');
+    setActivities(getActivities().filter(a => a.customer === customerName));
+    setRelProfile(getProfile(customerName));
+    setAiMemory(getMemory(customerName));
   }, [customerName]);
 
   const monthlyStats = useMemo(() => {
@@ -136,6 +165,26 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ name:
     : currentStats.ps === 0 && currentStats.cs > 0 ? 'new'
     : 'normal';
   const grade = GRADE_CONFIG[gradeKey];
+
+  const customerStatObj = useMemo((): CustomerStats => ({
+    name: customerName,
+    grade: gradeKey as CustomerGrade,
+    currentMonthSales: currentStats.cs,
+    prevMonthSales: currentStats.ps,
+    growthRate: currentStats.growth,
+    totalSales: currentStats.total,
+    transactionCount: campaigns.length,
+  }), [customerName, gradeKey, currentStats, campaigns]);
+
+  const health = useMemo(() =>
+    customerName ? computeHealthScore(customerStatObj, activities, campaigns) : null,
+    [customerStatObj, activities, campaigns],
+  );
+
+  const customerAlert = useMemo(() =>
+    customerName ? (computePredictiveAlerts([customerStatObj], activities)[0] ?? null) : null,
+    [customerStatObj, activities],
+  );
 
   const saveGoal = () => {
     const v = parseInt(goalInput.replace(/,/g, ''), 10);
@@ -250,6 +299,80 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ name:
           ))}
         </div>
       </div>
+
+      {/* AI Intelligence Panel */}
+      {health && (
+        <div className="card" style={{ marginBottom: 20, padding: '20px 24px', border: '1px solid #E6F2F2' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+            <Brain style={{ width: 16, height: 16, color: '#005957' }} />
+            <span style={{ fontSize: 14, fontWeight: 700, color: '#191F28' }}>AI Intelligence</span>
+            <span style={{ fontSize: 11, color: '#8B95A1', marginLeft: 'auto' }}>관계 분석 · 건강도 · 액션 추천</span>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '80px 1fr 1fr', gap: 20, alignItems: 'start' }}>
+            {/* Health Ring */}
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
+              <HealthRing score={health.score} color={health.score >= 70 ? '#005957' : health.score >= 45 ? '#F59E0B' : '#F04452'} size={64} />
+              <span style={{ fontSize: 11, color: '#8B95A1', fontWeight: 600 }}>건강도</span>
+            </div>
+
+            {/* Health Factors */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <p style={{ fontSize: 12, fontWeight: 700, color: '#8B95A1', marginBottom: 2 }}>점수 구성</p>
+              {health.factors.map((f, i) => (
+                <div key={i}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
+                    <span style={{ fontSize: 12, color: '#191F28' }}>{f.label}</span>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: f.contribution >= 70 ? '#005957' : f.contribution >= 40 ? '#F59E0B' : '#F04452' }}>{f.contribution}pt</span>
+                  </div>
+                  <div style={{ height: 4, background: '#F2F4F6', borderRadius: 4 }}>
+                    <div style={{ width: `${f.contribution}%`, height: '100%', background: f.contribution >= 70 ? '#005957' : f.contribution >= 40 ? '#F59E0B' : '#F04452', borderRadius: 4, transition: 'width 0.5s' }} />
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Right: Alert + Actions + Relationship */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {customerAlert && (
+                <div style={{ padding: '10px 14px', borderRadius: 10, background: customerAlert.severity === 'high' ? '#FEF2F2' : customerAlert.severity === 'medium' ? '#FFFBEB' : '#F0FDF4', border: `1px solid ${customerAlert.severity === 'high' ? '#FCA5A5' : customerAlert.severity === 'medium' ? '#FDE68A' : '#86EFAC'}` }}>
+                  <p style={{ fontSize: 12, fontWeight: 700, color: customerAlert.severity === 'high' ? '#DC2626' : customerAlert.severity === 'medium' ? '#B45309' : '#16A34A', marginBottom: 3 }}>
+                    {customerAlert.severity === 'high' ? '⚠️' : customerAlert.severity === 'medium' ? '📊' : '✅'} {customerAlert.type === 'churn_risk' ? '이탈 위험' : customerAlert.type === 'growth_opportunity' ? '성장 기회' : '참여 감소'}
+                  </p>
+                  <p style={{ fontSize: 11, color: '#8B95A1' }}>{customerAlert.signals[0] ?? customerAlert.recommendation}</p>
+                </div>
+              )}
+
+              {relProfile && relProfile.keywords.length > 0 && (
+                <div>
+                  <p style={{ fontSize: 11, color: '#8B95A1', fontWeight: 600, marginBottom: 6 }}>선호 키워드</p>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                    {relProfile.keywords.slice(0, 4).map((kw, i) => (
+                      <span key={i} style={{ padding: '2px 8px', borderRadius: 10, fontSize: 11, background: '#E6F2F2', color: '#005957', fontWeight: 600 }}>{kw}</span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {aiMemory && aiMemory.lastSummary && (
+                <div style={{ padding: '8px 12px', borderRadius: 8, background: '#F8F9FA', border: '1px solid #F2F4F6' }}>
+                  <p style={{ fontSize: 11, color: '#8B95A1', fontWeight: 600, marginBottom: 4 }}>AI 메모리</p>
+                  <p style={{ fontSize: 12, color: '#191F28' }}>{aiMemory.lastSummary}</p>
+                </div>
+              )}
+
+              <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+                <button onClick={() => setDrawer('message')} style={{ flex: 1, padding: '8px 0', borderRadius: 8, background: '#005957', color: 'white', border: 'none', fontSize: 12, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
+                  <Send style={{ width: 12, height: 12 }} /> 메시지 생성
+                </button>
+                <button onClick={() => setDrawer('proposal')} style={{ flex: 1, padding: '8px 0', borderRadius: 8, background: 'white', color: '#005957', border: '1px solid #E6F2F2', fontSize: 12, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
+                  <FileText style={{ width: 12, height: 12 }} /> 제안서 생성
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 2열: 월별 추이 + 품목 구성 */}
       <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 20, marginBottom: 20 }}>
@@ -436,6 +559,16 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ name:
           </button>
         )}
       </div>
+
+      {drawer && (
+        <QuickGenerateDrawer
+          customer={customerName}
+          action={drawer}
+          growthRate={currentStats.growth}
+          onClose={() => setDrawer(null)}
+          onGenerated={() => setActivities(getActivities().filter(a => a.customer === customerName))}
+        />
+      )}
     </main>
   );
 }

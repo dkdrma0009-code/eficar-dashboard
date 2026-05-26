@@ -4,7 +4,8 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { ArrowUpDown, ChevronUp, ChevronDown, ExternalLink } from 'lucide-react';
 import type { ViewData, CustomerStats, CustomerGrade } from '@/lib/types';
-import { formatCurrency, formatCurrencyFull, formatPercent, formatMonth, GRADE_CONFIG } from '@/lib/dataUtils';
+import { formatCurrency, formatCurrencyFull, formatMonth, GRADE_CONFIG } from '@/lib/dataUtils';
+import { TREND_CONFIG } from '@/lib/trendIntelligence';
 import { getGoals, type Goals } from '@/lib/goalsStorage';
 
 interface Props {
@@ -27,7 +28,7 @@ const GRADE_FILTERS: { key: CustomerGrade | 'all'; label: string }[] = [
 ];
 
 export default function CustomerTable({ viewData, onSelectCustomer, gradeFilter: externalFilter }: Props) {
-  const { customerStats, selectedMonth, prevMonth } = viewData;
+  const { customerStats, selectedMonth, prevMonth, isLatestMonth, mtdInfo, trendMap } = viewData;
   const [sortKey, setSortKey] = useState<SortKey>('currentMonthSales');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
   const [internalFilter, setInternalFilter] = useState<CustomerGrade | 'all'>('all');
@@ -60,10 +61,14 @@ export default function CustomerTable({ viewData, onSelectCustomer, gradeFilter:
       : <ChevronUp className="w-3 h-3 inline ml-1" style={{ color: '#005957' }} />;
   }
 
+  const prevColLabel = isLatestMonth && mtdInfo
+    ? `전월 동기(${mtdInfo.todayDay}일)`
+    : `${formatMonth(prevMonth)} 매출`;
+
   const cols: { key: SortKey; label: string; align: string }[] = [
     { key: 'name',               label: '고객사명',                         align: 'left' },
     { key: 'currentMonthSales',  label: `${formatMonth(selectedMonth)} 매출`, align: 'right' },
-    { key: 'prevMonthSales',     label: `${formatMonth(prevMonth)} 매출`,     align: 'right' },
+    { key: 'prevMonthSales',     label: prevColLabel,                       align: 'right' },
     { key: 'growthRate',         label: '증감률',                           align: 'center' },
     { key: 'totalSales',         label: '누적 매출',                        align: 'right' },
     { key: 'transactionCount',   label: '거래건수',                         align: 'right' },
@@ -124,6 +129,7 @@ export default function CustomerTable({ viewData, onSelectCustomer, gradeFilter:
                   <SortIcon col={col.key} />
                 </th>
               ))}
+              <th style={{ textAlign: 'center' }}>추세</th>
             </tr>
           </thead>
           <tbody>
@@ -175,9 +181,12 @@ export default function CustomerTable({ viewData, onSelectCustomer, gradeFilter:
                     ) : <span style={{ color: '#CBD5E0' }}>-</span>}
                   </td>
                   <td style={{ textAlign: 'right', color: '#8B95A1' }}>
-                    {row.prevMonthSales > 0
-                      ? <span title={formatCurrencyFull(row.prevMonthSales)}>{formatCurrency(row.prevMonthSales)}원</span>
-                      : <span style={{ color: '#CBD5E0' }}>-</span>}
+                    {(() => {
+                      const v = (isLatestMonth && row.prevMtdSales != null) ? row.prevMtdSales : row.prevMonthSales;
+                      return v > 0
+                        ? <span title={formatCurrencyFull(v)}>{formatCurrency(v)}원</span>
+                        : <span style={{ color: '#CBD5E0' }}>-</span>;
+                    })()}
                   </td>
                   <td style={{ textAlign: 'center' }}>
                     {(row.prevMonthSales > 0 || row.currentMonthSales > 0) ? (
@@ -196,6 +205,26 @@ export default function CustomerTable({ viewData, onSelectCustomer, gradeFilter:
                   </td>
                   <td style={{ textAlign: 'right', color: '#8B95A1' }}>
                     {row.transactionCount > 0 ? `${row.transactionCount.toLocaleString()}건` : <span style={{ color: '#CBD5E0' }}>-</span>}
+                  </td>
+                  <td style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>
+                    {(() => {
+                      const t = trendMap[row.name];
+                      if (!t) return null;
+                      const cfg = TREND_CONFIG[t.state];
+                      return (
+                        <div title={t.description} style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+                          <span style={{
+                            fontSize: 11, fontWeight: 700, padding: '3px 8px', borderRadius: 9999,
+                            background: cfg.bg, color: cfg.color, whiteSpace: 'nowrap',
+                          }}>
+                            {cfg.icon} {cfg.label}
+                          </span>
+                          {t.state !== 'stable' && t.state !== 'new_customer' && (
+                            <span style={{ fontSize: 9, color: '#B0B8C1' }}>{t.description.slice(0, 14)}</span>
+                          )}
+                        </div>
+                      );
+                    })()}
                   </td>
                 </tr>
               );
