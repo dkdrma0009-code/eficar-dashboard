@@ -7,7 +7,7 @@ export function getPopbill() {
     popbill.config({
       LinkID: process.env.POPBILL_LINK_ID!,
       SecretKey: process.env.POPBILL_SECRET_KEY!,
-      IsTest: false,
+      IsTest: process.env.POPBILL_TEST_MODE === 'true',
       defaultErrorHandler: () => {},
     });
     initialized = true;

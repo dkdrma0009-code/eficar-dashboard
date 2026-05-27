@@ -7,6 +7,7 @@ import { addLibraryItem } from '@/lib/libraryStorage';
 import { getCRMNote } from '@/lib/crmStorage';
 import { addCalendarEvent } from '@/lib/calendarStorage';
 import { addCampaign, getCampaigns } from '@/lib/campaignStorage';
+import { addSendLog, generateLogId, buildTrackingPixelUrl, buildClickTrackUrl } from '@/lib/sendLogStorage';
 import { useDashboardData } from '@/lib/DataContext';
 import {
   computeViewData, getCustomerTopItems, categorizeProduct,
@@ -268,6 +269,16 @@ export default function ContentPage() {
   const [kakaoSending, setKakaoSending] = useState(false);
   const [kakaoFeedback, setKakaoFeedback] = useState('');
 
+  // MMS 모드
+  const [mmsMode, setMmsMode] = useState(false);
+  const [mmsImage, setMmsImage] = useState<{ base64: string; mime: string } | null>(null);
+  const [mmsCardForExport, setMmsCardForExport] = useState<CardItem | null>(null);
+  const [mmsImageGenerating, setMmsImageGenerating] = useState(false);
+
+  // 이메일 추적 픽셀
+  const [emailTrackId, setEmailTrackId] = useState<string>(() => generateLogId());
+  const [emailTrackEnabled, setEmailTrackEnabled] = useState(false);
+
   // LinkedIn 직접 게시 상태
   const [liToken, setLiToken] = useState<string>('');
   const [liPersonId, setLiPersonId] = useState<string>('');
@@ -423,20 +434,75 @@ export default function ContentPage() {
     }
   }, [customer]);
 
+  // MMS 카드 이미지 자동 생성
+  const generateMmsImage = useCallback(async () => {
+    if (!contentData) return;
+    setMmsImageGenerating(true);
+
+    let card: CardItem;
+    const customerLabel = contentData.customer === '전체 고객사' ? '에픽카 파트너' : contentData.customer;
+
+    if (contentData.growthStr) {
+      card = {
+        layout: 'big-number',
+        data: {
+          tag: customerLabel,
+          number: contentData.growthStr,
+          unit: '매출 성장',
+          desc: `${contentData.todayLabel} 에픽카 공급 성과`,
+        },
+      };
+    } else {
+      card = {
+        layout: 'cover',
+        data: {
+          badge: `에픽카 × ${customerLabel}`,
+          headline: `${contentData.monthsActive}개월 파트너십 성과`,
+          subheadline: contentData.totalSales,
+          highlight: contentData.topItem,
+        },
+      };
+    }
+
+    setMmsCardForExport(card);
+    await new Promise(r => setTimeout(r, 400));
+
+    const el = document.getElementById('mms-card-export');
+    if (!el) { setMmsImageGenerating(false); setMmsCardForExport(null); return; }
+
+    try {
+      const html2canvas = (await import('html2canvas')).default;
+      const canvas = await html2canvas(el, { scale: 2, useCORS: true, backgroundColor: null });
+      const base64 = canvas.toDataURL('image/png').split(',')[1];
+      setMmsImage({ base64, mime: 'image/png' });
+    } catch (e) {
+      console.error('MMS 이미지 생성 실패:', e);
+    } finally {
+      setMmsCardForExport(null);
+      setMmsImageGenerating(false);
+    }
+  }, [contentData]);
+
   // SMS 발송
   const sendSMS = async () => {
     if (!smsPhone || !activeText) return;
     setSmsSending(true);
     setSmsFeedback('');
     try {
+      const body: Record<string, unknown> = {
+        receiver: smsPhone.replace(/-/g, ''),
+        receiverName: contentData?.customer ?? '',
+        content: activeText,
+      };
+      if (mmsMode && mmsImage) {
+        body.imageBase64 = mmsImage.base64;
+        body.imageMimeType = mmsImage.mime;
+        body.subject = contentData?.customer ? `에픽카 × ${contentData.customer}` : '에픽카 소식';
+      }
       const res = await fetch('/api/popbill/sms', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          receiver: smsPhone.replace(/-/g, ''),
-          receiverName: contentData?.customer ?? '',
-          content: activeText,
-        }),
+        body: JSON.stringify(body),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -445,6 +511,13 @@ export default function ContentPage() {
         setSmsFeedback(`✅ 문자 발송 완료 (${data.msgType})`);
         logToCalendar('kakao');
         logToCampaign('kakao');
+        addSendLog({
+          channel: (data.msgType as string).toLowerCase() as 'sms' | 'lms' | 'mms',
+          customer: contentData?.customer ?? '',
+          receiver_masked: smsPhone.slice(-4).padStart(smsPhone.length, '*'),
+          content_preview: activeText.slice(0, 40),
+          receipt_num: data.receiptNum,
+        });
       }
     } catch (e) {
       setSmsFeedback(`❌ ${String(e)}`);
@@ -476,6 +549,13 @@ export default function ContentPage() {
         setKakaoFeedback('✅ 친구톡 발송 완료');
         logToCalendar('kakao');
         logToCampaign('kakao');
+        addSendLog({
+          channel: 'kakao',
+          customer: contentData?.customer ?? '',
+          receiver_masked: smsPhone.slice(-4).padStart(smsPhone.length, '*'),
+          content_preview: activeText.slice(0, 40),
+          receipt_num: data.receiptNum,
+        });
       }
     } catch (e) {
       setKakaoFeedback(`❌ ${String(e)}`);
@@ -939,6 +1019,33 @@ export default function ContentPage() {
                         placeholder="example@company.com"
                         style={{ width: '100%', padding: '7px 10px', border: '1px solid #F2F4F6', borderRadius: 7, fontSize: 13, color: '#191F28', fontFamily: 'inherit', background: 'white' }}
                       />
+                      {/* 열람 추적 픽셀 */}
+                      <label style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8, cursor: 'pointer', userSelect: 'none' }}>
+                        <input type="checkbox" checked={emailTrackEnabled} onChange={e => {
+                          setEmailTrackEnabled(e.target.checked);
+                          if (e.target.checked) setEmailTrackId(generateLogId());
+                        }} style={{ accentColor: '#005957', width: 14, height: 14 }} />
+                        <span style={{ fontSize: 12, fontWeight: 600, color: emailTrackEnabled ? '#005957' : '#8B95A1' }}>열람 추적 픽셀 포함</span>
+                      </label>
+                      {emailTrackEnabled && (
+                        <div style={{ marginTop: 6, padding: '8px 10px', background: '#F0FDF9', borderRadius: 7, border: '1px solid #A7F3D0' }}>
+                          <p style={{ fontSize: 11, color: '#005957', fontWeight: 600, marginBottom: 4 }}>이메일 본문 하단에 추가할 HTML</p>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <code style={{ fontSize: 10, color: '#374151', background: 'white', padding: '4px 6px', borderRadius: 4, border: '1px solid #E5E7EB', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {`<img src="${buildTrackingPixelUrl(emailTrackId)}" width="1" height="1" />`}
+                            </code>
+                            <button
+                              onClick={() => {
+                                navigator.clipboard.writeText(`<img src="${buildTrackingPixelUrl(emailTrackId)}" width="1" height="1" style="display:none" />`);
+                                addSendLog({ id: emailTrackId, channel: 'email', customer: contentData?.customer ?? '', receiver_masked: recipientEmail || '미입력', content_preview: activeText.slice(0, 40) });
+                              }}
+                              style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid #005957', background: 'white', color: '#005957', fontSize: 11, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}
+                            >
+                              복사
+                            </button>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
 
@@ -1013,14 +1120,58 @@ export default function ContentPage() {
                             {kakaoSending ? '발송 중...' : '💬 친구톡 발송'}
                           </button>
                         )}
+                        {/* MMS 토글 */}
+                        <label style={{ display: 'flex', alignItems: 'center', gap: 5, cursor: 'pointer', fontSize: 12, fontWeight: 600, color: mmsMode ? '#005957' : '#8B95A1', userSelect: 'none' }}>
+                          <input type="checkbox" checked={mmsMode} onChange={e => { setMmsMode(e.target.checked); if (!e.target.checked) setMmsImage(null); }} style={{ accentColor: '#005957', width: 14, height: 14 }} />
+                          MMS (이미지 첨부)
+                        </label>
                         <button
                           onClick={sendSMS}
-                          disabled={smsSending || !smsPhone}
-                          style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 7, border: '1px solid #E2E8F0', cursor: smsSending || !smsPhone ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 700, background: 'white', color: '#191F28', opacity: smsSending || !smsPhone ? 0.5 : 1 }}
+                          disabled={smsSending || !smsPhone || (mmsMode && !mmsImage)}
+                          style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 7, border: '1px solid #E2E8F0', cursor: (smsSending || !smsPhone || (mmsMode && !mmsImage)) ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 700, background: 'white', color: '#191F28', opacity: (smsSending || !smsPhone || (mmsMode && !mmsImage)) ? 0.5 : 1 }}
                         >
-                          {smsSending ? '발송 중...' : '📨 문자 발송'}
+                          {smsSending ? '발송 중...' : mmsMode ? '🖼️ MMS 발송' : '📨 문자 발송'}
                         </button>
                       </div>
+
+                      {/* MMS 이미지 첨부 영역 */}
+                      {mmsMode && (
+                        <div style={{ marginBottom: 10, padding: '10px 12px', background: '#F0FDF9', borderRadius: 8, border: '1px solid #A7F3D0' }}>
+                          <p style={{ fontSize: 11, fontWeight: 700, color: '#005957', marginBottom: 8 }}>MMS 이미지</p>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                            <button
+                              onClick={generateMmsImage}
+                              disabled={mmsImageGenerating || !contentData}
+                              style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 12px', borderRadius: 7, border: '1px solid #005957', cursor: mmsImageGenerating ? 'not-allowed' : 'pointer', fontSize: 12, fontWeight: 600, color: '#005957', background: 'white', opacity: mmsImageGenerating ? 0.6 : 1 }}
+                            >
+                              {mmsImageGenerating ? '⏳ 생성 중...' : '🎨 카드 자동 생성'}
+                            </button>
+                            <label style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 12px', borderRadius: 7, border: '1px dashed #8B95A1', cursor: 'pointer', fontSize: 12, fontWeight: 600, color: '#8B95A1', background: 'white' }}>
+                              🖼️ 직접 첨부
+                              <input type="file" accept="image/*" onChange={e => {
+                                const file = e.target.files?.[0];
+                                if (!file) return;
+                                const reader = new FileReader();
+                                reader.onload = () => {
+                                  const result = reader.result as string;
+                                  setMmsImage({ base64: result.split(',')[1], mime: file.type });
+                                };
+                                reader.readAsDataURL(file);
+                              }} style={{ display: 'none' }} />
+                            </label>
+                            {mmsImage && (
+                              <span style={{ fontSize: 12, color: '#005957', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
+                                ✅ 이미지 준비됨
+                                <button onClick={() => setMmsImage(null)} style={{ color: '#8B95A1', background: 'none', border: 'none', cursor: 'pointer', fontSize: 14, lineHeight: 1, padding: 0 }}>×</button>
+                              </span>
+                            )}
+                          </div>
+                          {mmsMode && !mmsImage && (
+                            <p style={{ fontSize: 11, color: '#B45309', marginTop: 6 }}>이미지를 첨부해야 MMS 발송이 가능합니다</p>
+                          )}
+                        </div>
+                      )}
+
                       {kakaoFeedback && <p style={{ fontSize: 12, fontWeight: 600, color: kakaoFeedback.startsWith('✅') ? '#00B386' : '#EF4444', marginBottom: 4 }}>{kakaoFeedback}</p>}
                       {smsFeedback && <p style={{ fontSize: 12, fontWeight: 600, color: smsFeedback.startsWith('✅') ? '#00B386' : '#EF4444' }}>{smsFeedback}</p>}
                     </div>
@@ -1117,6 +1268,15 @@ export default function ContentPage() {
           style={{ position: 'fixed', top: -9999, left: -9999, pointerEvents: 'none' }}
         >
           <CardCanvas card={liCardForExport} ratio="4:5" forExport />
+        </div>
+      )}
+      {/* MMS 카드 이미지 생성용 숨김 캔버스 */}
+      {mmsCardForExport && (
+        <div
+          id="mms-card-export"
+          style={{ position: 'fixed', top: -9999, left: -9999, pointerEvents: 'none' }}
+        >
+          <CardCanvas card={mmsCardForExport} ratio="16:9" forExport />
         </div>
       )}
     </main>
