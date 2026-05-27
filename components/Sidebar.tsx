@@ -8,7 +8,7 @@ import { useMemo } from 'react';
 import {
   Zap, LayoutDashboard, Users, FileText, Sparkles,
   Image, BarChart2, Send, Calendar, BookOpen,
-  GitCompare, Upload,
+  GitCompare, Upload, Newspaper,
 } from 'lucide-react';
 
 const SECTIONS = [
@@ -25,6 +25,7 @@ const SECTIONS = [
       { href: '/proposal',   label: 'AI 제안서',    icon: FileText },
       { href: '/content',    label: '콘텐츠 생성',  icon: Sparkles },
       { href: '/cardnews',   label: '카드뉴스',     icon: Image },
+      { href: '/flyer',      label: '안내문 생성',  icon: Newspaper },
       { href: '/targeting',  label: '타겟 메시지',  icon: Users },
       { href: '/report',     label: '월간 보고서',  icon: BarChart2 },
     ],
