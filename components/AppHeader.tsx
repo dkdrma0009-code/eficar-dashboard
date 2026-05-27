@@ -26,14 +26,8 @@ const NAV = [
 
 export function EficarLogo() {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-      <div style={{
-        width: 30, height: 30, borderRadius: 8, background: '#005957',
-        display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-      }}>
-        <span style={{ color: 'white', fontWeight: 900, fontSize: 16, lineHeight: 1 }}>∞</span>
-      </div>
-      <span style={{ fontWeight: 800, fontSize: 15, color: '#191F28', letterSpacing: '-0.3px' }}>에픽카</span>
+    <div style={{ display: 'flex', alignItems: 'center' }}>
+      <img src="/eficar_logo.png" alt="에픽카" style={{ height: 26, width: 'auto' }} />
     </div>
   );
 }

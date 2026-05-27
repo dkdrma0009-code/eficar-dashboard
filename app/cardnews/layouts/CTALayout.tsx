@@ -88,23 +88,8 @@ export default function CTALayout({ data, ratio, cardWidth = CARD_WIDTH }: Props
           alignItems: 'center',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: fs(0.016) }}>
-          <div
-            style={{
-              width: fs(0.052),
-              height: fs(0.052),
-              borderRadius: fs(0.014),
-              background: 'rgba(255,255,255,0.2)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
-            <span style={{ color: PALETTE.white, fontWeight: 900, fontSize: fs(0.032), lineHeight: 1 }}>∞</span>
-          </div>
-          <span style={{ color: PALETTE.white, fontWeight: 800, fontSize: fs(0.036), letterSpacing: '-0.02em' }}>
-            에픽카
-          </span>
+        <div style={{ display: 'flex', alignItems: 'center' }}>
+          <img src="/eficar_logo_white.png" alt="에픽카" style={{ height: fs(0.052), width: 'auto' }} />
         </div>
 
         {data.subheadline && (

@@ -77,23 +77,8 @@ export default function CoverLayout({ data, ratio, cardWidth = CARD_WIDTH }: Pro
         }}
       >
         {/* Logo */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: fs(0.018) }}>
-          <div
-            style={{
-              width: fs(0.055),
-              height: fs(0.055),
-              borderRadius: fs(0.015),
-              background: 'rgba(255,255,255,0.2)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
-            <span style={{ color: PALETTE.white, fontWeight: 900, fontSize: fs(0.034), lineHeight: 1 }}>∞</span>
-          </div>
-          <span style={{ color: PALETTE.white, fontWeight: 800, fontSize: fs(0.038), letterSpacing: '-0.02em' }}>
-            에픽카
-          </span>
+        <div style={{ display: 'flex', alignItems: 'center' }}>
+          <img src="/eficar_logo_white.png" alt="에픽카" style={{ height: fs(0.055), width: 'auto' }} />
         </div>
 
         {/* Badge */}

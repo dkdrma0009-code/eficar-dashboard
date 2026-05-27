@@ -63,29 +63,7 @@ export default function BigNumberLayout({ data, ratio, cardWidth = CARD_WIDTH }:
           gap: fs(0.014),
         }}
       >
-        <div
-          style={{
-            width: fs(0.044),
-            height: fs(0.044),
-            borderRadius: fs(0.012),
-            background: PALETTE.accent,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
-        >
-          <span style={{ color: PALETTE.white, fontWeight: 900, fontSize: fs(0.028), lineHeight: 1 }}>∞</span>
-        </div>
-        <span
-          style={{
-            color: PALETTE.dark,
-            fontWeight: 800,
-            fontSize: fs(0.030),
-            letterSpacing: '-0.02em',
-          }}
-        >
-          에픽카
-        </span>
+        <img src="/eficar_logo.png" alt="에픽카" style={{ height: fs(0.044), width: 'auto' }} />
       </div>
 
       {/* Tag */}

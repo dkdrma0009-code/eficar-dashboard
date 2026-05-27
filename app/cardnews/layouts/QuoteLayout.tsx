@@ -68,20 +68,7 @@ export default function QuoteLayout({ data, ratio, cardWidth = CARD_WIDTH }: Pro
           opacity: 0.4,
         }}
       >
-        <div
-          style={{
-            width: fs(0.038),
-            height: fs(0.038),
-            borderRadius: fs(0.010),
-            background: 'rgba(255,255,255,0.2)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
-        >
-          <span style={{ color: PALETTE.white, fontWeight: 900, fontSize: fs(0.024), lineHeight: 1 }}>∞</span>
-        </div>
-        <span style={{ color: PALETTE.white, fontWeight: 800, fontSize: fs(0.026) }}>에픽카</span>
+        <img src="/eficar_logo_white.png" alt="에픽카" style={{ height: fs(0.038), width: 'auto' }} />
       </div>
 
       {/* Quote mark */}

@@ -28,11 +28,8 @@ function getPrevMonthKey(months: string[], month: string): string {
 
 function ReportLogo() {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-      <div style={{ width: 32, height: 32, borderRadius: 8, background: 'rgba(255,255,255,0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <span style={{ color: 'white', fontWeight: 900, fontSize: 18, lineHeight: 1 }}>∞</span>
-      </div>
-      <span style={{ fontSize: '20px', fontWeight: 900, color: 'white', letterSpacing: '-0.5px', lineHeight: 1 }}>에픽카</span>
+    <div style={{ display: 'flex', alignItems: 'center' }}>
+      <img src="/eficar_logo_white.png" alt="에픽카" style={{ height: 32, width: 'auto' }} />
     </div>
   );
 }

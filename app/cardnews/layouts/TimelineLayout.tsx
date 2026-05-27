@@ -51,20 +51,7 @@ export default function TimelineLayout({ data, ratio, cardWidth = CARD_WIDTH }: 
           opacity: 0.45,
         }}
       >
-        <div
-          style={{
-            width: fs(0.038),
-            height: fs(0.038),
-            borderRadius: fs(0.010),
-            background: PALETTE.accent,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
-        >
-          <span style={{ color: PALETTE.white, fontWeight: 900, fontSize: fs(0.024), lineHeight: 1 }}>∞</span>
-        </div>
-        <span style={{ color: PALETTE.dark, fontWeight: 800, fontSize: fs(0.026) }}>에픽카</span>
+        <img src="/eficar_logo.png" alt="에픽카" style={{ height: fs(0.038), width: 'auto' }} />
       </div>
 
       {/* Headline */}

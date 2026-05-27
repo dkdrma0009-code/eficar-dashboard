@@ -126,7 +126,7 @@ function Gs25EventFlyer({ d }: { d: Gs25EventData }) {
       <div style={{ background: '#1A1A2E', padding: '14px 24px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 16 }}>
         {d.partnerLogo === 'sk' && <div style={{ color: 'white', fontSize: 13, fontWeight: 700 }}>SK 렌터카</div>}
         {d.partnerLogo === 'lotte' && <div style={{ color: 'white', fontSize: 13, fontWeight: 700 }}>롯데렌탈</div>}
-        <div style={{ color: '#7EDCD9', fontSize: 15, fontWeight: 900 }}>∞에픽카</div>
+        <img src="/eficar_logo_white.png" alt="에픽카" style={{ height: 20, width: 'auto' }} />
         <div style={{ color: '#6B7280', fontSize: 11 }}>프로모션 사전 공지 없이 조기 종료될 수 있습니다.</div>
       </div>
     </div>
@@ -144,7 +144,7 @@ function WheelBuybackFlyer({ d }: { d: WheelBuybackData }) {
       {/* 헤더 */}
       <div style={{ background: '#F8F9FA', padding: '20px 24px 0' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
-          <div style={{ color: '#005957', fontSize: 16, fontWeight: 900 }}>∞에픽카</div>
+          <img src="/eficar_logo.png" alt="에픽카" style={{ height: 22, width: 'auto' }} />
           <div style={{ textAlign: 'right', fontSize: 12, color: '#6B7280' }}>
             더 자세한 내용이 궁금하신가요?<br />
             <strong style={{ color: '#191F28' }}>{d.contactNum}</strong>
@@ -204,7 +204,10 @@ function WheelBuybackFlyer({ d }: { d: WheelBuybackData }) {
 
       {/* 하단 */}
       <div style={{ background: '#005957', padding: '16px 24px', textAlign: 'center' }}>
-        <div style={{ color: 'white', fontSize: 14, fontWeight: 700 }}>지금 바로 <strong>∞에픽카</strong>에 전화하세요!</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <img src="/eficar_logo_white.png" alt="에픽카" style={{ height: 18, width: 'auto' }} />
+          <span style={{ color: 'white', fontSize: 13, fontWeight: 700 }}>에 전화하세요!</span>
+        </div>
         <div style={{ color: '#7EDCD9', fontSize: 24, fontWeight: 900, letterSpacing: 2, marginTop: 4 }}>{d.contactNum}</div>
       </div>
     </div>
@@ -215,7 +218,10 @@ function EpichubFlyer({ d }: { d: EpichubData }) {
   return (
     <div style={{ width: 480, fontFamily: "'Noto Sans KR', sans-serif", background: '#fff', overflow: 'hidden' }}>
       <div style={{ background: 'linear-gradient(135deg, #005957 0%, #007A78 100%)', padding: '32px 24px', textAlign: 'center', color: 'white' }}>
-        <div style={{ fontSize: 14, fontWeight: 600, opacity: 0.8, marginBottom: 8 }}>∞에픽카 공식 파트너 네트워크</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, opacity: 0.9, marginBottom: 8 }}>
+          <img src="/eficar_logo_white.png" alt="에픽카" style={{ height: 18, width: 'auto' }} />
+          <span style={{ color: 'white', fontSize: 13, fontWeight: 600 }}>공식 파트너 네트워크</span>
+        </div>
         <div style={{ fontSize: 30, fontWeight: 900, lineHeight: 1.3 }}>에픽허브 정비소<br />파트너 모집 중!</div>
         <div style={{ fontSize: 13, opacity: 0.85, marginTop: 10 }}>{d.targetArea} 지역 우선 모집</div>
       </div>
@@ -260,7 +266,9 @@ function CustomPromoFlyer({ d }: { d: CustomPromoData }) {
   return (
     <div style={{ width: 480, fontFamily: "'Noto Sans KR', sans-serif", background: '#fff', overflow: 'hidden' }}>
       <div style={{ background: d.bgColor || '#005957', padding: '36px 24px', textAlign: 'center', color: 'white' }}>
-        <div style={{ fontSize: 13, fontWeight: 600, opacity: 0.8, marginBottom: 8 }}>∞에픽카</div>
+        <div style={{ opacity: 0.9, marginBottom: 8 }}>
+          <img src="/eficar_logo_white.png" alt="에픽카" style={{ height: 18, width: 'auto' }} />
+        </div>
         <div style={{ fontSize: 28, fontWeight: 900, lineHeight: 1.3 }}>{d.title || '제목을 입력하세요'}</div>
         {d.subtitle && <div style={{ fontSize: 16, fontWeight: 600, opacity: 0.9, marginTop: 8 }}>{d.subtitle}</div>}
       </div>

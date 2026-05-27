@@ -90,21 +90,8 @@ export default function CustomerCaseLayout({ data, ratio, cardWidth = CARD_WIDTH
             {data.headline}
           </div>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: fs(0.012), opacity: 0.75 }}>
-          <div
-            style={{
-              width: fs(0.044),
-              height: fs(0.044),
-              borderRadius: fs(0.012),
-              background: 'rgba(255,255,255,0.2)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
-            <span style={{ color: PALETTE.white, fontWeight: 900, fontSize: fs(0.028), lineHeight: 1 }}>∞</span>
-          </div>
-          <span style={{ color: PALETTE.white, fontWeight: 800, fontSize: fs(0.028) }}>에픽카</span>
+        <div style={{ opacity: 0.85 }}>
+          <img src="/eficar_logo_white.png" alt="에픽카" style={{ height: fs(0.044), width: 'auto' }} />
         </div>
       </div>
 
