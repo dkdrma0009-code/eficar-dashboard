@@ -19,15 +19,21 @@ import type { CardItem } from '@/app/cardnews/types';
 
 const SAVINGS_RATE = 0.30;
 
-type ContentType = 'linkedin' | 'kakao' | 'email' | 'card' | 'sms';
+type ContentType = 'linkedin' | 'kakao' | 'email' | 'card' | 'sms' | 'lms' | 'mms';
 
-const CONTENT_TYPES: { key: ContentType; label: string; emoji: string }[] = [
+const CONTENT_TYPES: { key: ContentType; label: string; emoji: string; desc?: string }[] = [
   { key: 'linkedin', label: 'LinkedIn 포스트',      emoji: '💼' },
   { key: 'kakao',    label: '카카오톡 영업 메시지',  emoji: '💬' },
   { key: 'email',    label: '이메일 제안서',          emoji: '📧' },
-  { key: 'sms',      label: 'SMS / LMS / MMS',      emoji: '📨' },
+  { key: 'sms',      label: 'SMS (단문)',            emoji: '📱', desc: '90바이트 이하 · 이미지 없음' },
+  { key: 'lms',      label: 'LMS (장문)',            emoji: '📄', desc: '2,000자 이하 · 제목 있음' },
+  { key: 'mms',      label: 'MMS (이미지)',          emoji: '🖼️', desc: '이미지 필수 · 제목 있음' },
   { key: 'card',     label: '성과 카드 문구',         emoji: '📊' },
 ];
+
+function getByteLen(text: string) {
+  return text.split('').reduce((n, c) => n + (/[가-힣ㄱ-ㅎㅏ-ㅣ]/.test(c) ? 2 : 1), 0);
+}
 
 const EMPHASIS: { key: string; label: string }[] = [
   { key: 'growth',    label: '매출 성장' },
@@ -206,24 +212,78 @@ info@eficar.co.kr / 010-2752-1054`;
   }
 
   if (type === 'sms') {
-    // SMS: 90자 이하 단문 / LMS: 90자 초과 장문
+    // 90바이트 이하 단문 — 한글 최대 약 22~30자 수준으로 극도로 압축
     const v0 =
-`[에픽카] ${d.customer} ${d.todayLabel} 성과 공유
-
-${d.growthStr ? `전월 대비 ${d.growthStr} 성장 📈` : `누적 공급액 ${d.totalSales}`}
-주력 품목: ${d.topItem}
-OEM 대비 절감: ${d.savingsStr}
-
+`[에픽카] ${d.customer} ${d.todayLabel}
+${d.growthStr ? `성장 ${d.growthStr}` : `공급액 ${d.currentSales}`}
 문의 010-2752-1054`;
 
     const v1 =
-`[에픽카] 안녕하세요.
-${d.customer} ${d.todayLabel} 실적을 전달드립니다.
+`[에픽카] ${d.customer} 실적공유
+${d.topItem} 주력공급
+절감액 ${d.savingsStr}
+☎010-2752-1054`;
 
-${blocks.slice(0, 3).map(b => b.replace(/^[^ ]+ /, '')).join('\n')}
+    return [v0, v1][version % 2];
+  }
 
-자세한 내용은 연락 주세요.
-에픽카 마케팅팀 010-2752-1054`;
+  if (type === 'lms') {
+    const v0 =
+`제목: [에픽카] ${d.customer} ${d.todayLabel} 성과 공유
+
+안녕하세요, 에픽카 마케팅팀입니다.
+
+${d.customer} ${d.todayLabel} 공급 실적을 공유드립니다.
+
+${blocks.join('\n')}
+${d.missing.length > 0 ? `\n📌 추가 제안 품목: ${d.missing.slice(0, 2).join(', ')}` : ''}
+
+궁금하신 점은 편하게 연락 주세요.
+에픽카 마케팅팀 | 010-2752-1054 | info@eficar.co.kr`;
+
+    const v1 =
+`제목: ${d.customer} × 에픽카 ${d.monthsActive}개월 파트너십 성과
+
+${d.customer} 담당자님, 안녕하세요.
+에픽카입니다.
+
+${opener}
+
+${blocks.join('\n')}
+
+감사합니다.
+에픽카 | 010-2752-1054`;
+
+    return [v0, v1][version % 2];
+  }
+
+  if (type === 'mms') {
+    const v0 =
+`제목: [에픽카] ${d.customer} ${d.todayLabel} 성과 리포트
+
+안녕하세요, 에픽카 마케팅팀입니다.
+
+${d.customer}와 함께한 ${d.todayLabel} 성과를 이미지로 정리했습니다.
+
+${blocks.slice(0, 3).join('\n')}
+
+자세한 내용은 아래 이미지를 확인해 주시고,
+궁금하신 점은 편하게 연락 주세요.
+
+에픽카 | 010-2752-1054 | info@eficar.co.kr`;
+
+    const v1 =
+`제목: ${d.customer} 파트너십 ${d.monthsActive}개월 성과
+
+${d.customer} 담당자님,
+
+${opener}
+
+${blocks.slice(0, 3).join('\n')}
+${d.missing.length > 0 ? `\n확대 가능 품목: ${d.missing.slice(0, 2).join(', ')}` : ''}
+
+에픽카 마케팅팀 드림
+010-2752-1054`;
 
     return [v0, v1][version % 2];
   }
@@ -293,11 +353,20 @@ export default function ContentPage() {
   const [kakaoSending, setKakaoSending] = useState(false);
   const [kakaoFeedback, setKakaoFeedback] = useState('');
 
-  // MMS 모드
+  // MMS 이미지
   const [mmsMode, setMmsMode] = useState(false);
   const [mmsImage, setMmsImage] = useState<{ base64: string; mime: string } | null>(null);
   const [mmsCardForExport, setMmsCardForExport] = useState<CardItem | null>(null);
   const [mmsImageGenerating, setMmsImageGenerating] = useState(false);
+
+  // LMS/MMS 제목
+  const [msgSubject, setMsgSubject] = useState('');
+
+  // 일괄 발송
+  const [bulkNumbers, setBulkNumbers] = useState<{ phone: string; name: string }[]>([]);
+  const [bulkSending, setBulkSending] = useState(false);
+  const [bulkProgress, setBulkProgress] = useState({ done: 0, total: 0, success: 0, fail: 0 });
+  const [bulkDone, setBulkDone] = useState(false);
 
   // 이메일 추적 픽셀
   const [emailTrackId, setEmailTrackId] = useState<string>(() => generateLogId());
@@ -507,33 +576,36 @@ export default function ContentPage() {
     }
   }, [contentData]);
 
-  // SMS 발송
+  // 발송 body 빌더 (단건/일괄 공용)
+  const buildSmsBody = (receiver: string, receiverName: string) => {
+    const body: Record<string, unknown> = { receiver: receiver.replace(/-/g, ''), receiverName, content: activeText };
+    const effectiveSubject = msgSubject || (contentData?.customer ? `에픽카 × ${contentData.customer}` : '에픽카 소식');
+    if (contentType === 'mms' && mmsImage) {
+      body.imageBase64 = mmsImage.base64;
+      body.imageMimeType = mmsImage.mime;
+      body.subject = effectiveSubject;
+    } else if (contentType === 'lms') {
+      body.subject = effectiveSubject;
+    }
+    return body;
+  };
+
+  // SMS 단건 발송
   const sendSMS = async () => {
     if (!smsPhone || !activeText) return;
     setSmsSending(true);
     setSmsFeedback('');
     try {
-      const body: Record<string, unknown> = {
-        receiver: smsPhone.replace(/-/g, ''),
-        receiverName: contentData?.customer ?? '',
-        content: activeText,
-      };
-      if (mmsMode && mmsImage) {
-        body.imageBase64 = mmsImage.base64;
-        body.imageMimeType = mmsImage.mime;
-        body.subject = contentData?.customer ? `에픽카 × ${contentData.customer}` : '에픽카 소식';
-      }
       const res = await fetch('/api/popbill/sms', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
+        body: JSON.stringify(buildSmsBody(smsPhone, contentData?.customer ?? '')),
       });
       const data = await res.json();
       if (!res.ok) {
         setSmsFeedback(`❌ ${data.error}`);
       } else {
-        setSmsFeedback(`✅ 문자 발송 완료 (${data.msgType})`);
-        if (contentType !== 'sms') logToCalendar('kakao');
+        setSmsFeedback(`✅ ${data.msgType} 발송 완료`);
         logToCampaign('etc');
         addSendLog({
           channel: (data.msgType as string).toLowerCase() as 'sms' | 'lms' | 'mms',
@@ -548,6 +620,66 @@ export default function ContentPage() {
     } finally {
       setSmsSending(false);
     }
+  };
+
+  // 일괄 발송
+  const sendBulk = async () => {
+    if (!bulkNumbers.length || !activeText) return;
+    setBulkSending(true);
+    setBulkDone(false);
+    setBulkProgress({ done: 0, total: bulkNumbers.length, success: 0, fail: 0 });
+    for (const { phone, name } of bulkNumbers) {
+      try {
+        const res = await fetch('/api/popbill/sms', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(buildSmsBody(phone, name || (contentData?.customer ?? ''))),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error);
+        addSendLog({
+          channel: (data.msgType as string).toLowerCase() as 'sms' | 'lms' | 'mms',
+          customer: contentData?.customer ?? '',
+          receiver_masked: phone.slice(-4).padStart(phone.length, '*'),
+          content_preview: activeText.slice(0, 40),
+          receipt_num: data.receiptNum,
+        });
+        setBulkProgress(p => ({ ...p, done: p.done + 1, success: p.success + 1 }));
+      } catch {
+        setBulkProgress(p => ({ ...p, done: p.done + 1, fail: p.fail + 1 }));
+      }
+      await new Promise(r => setTimeout(r, 300)); // 팝빌 rate limit 방지
+    }
+    logToCampaign('etc');
+    setBulkSending(false);
+    setBulkDone(true);
+  };
+
+  // 수신번호 파일 파싱 (CSV / Excel)
+  const parseBulkFile = async (file: File) => {
+    const isCsv = /\.(csv|txt)$/i.test(file.name);
+    if (isCsv) {
+      const text = await file.text();
+      const rows = text.split('\n').map(l => l.trim()).filter(l => /\d{9,11}/.test(l));
+      setBulkNumbers(rows.map(l => {
+        const parts = l.split(',');
+        return { phone: parts[0].replace(/[^0-9]/g, ''), name: parts[1]?.trim() ?? '' };
+      }).filter(r => r.phone.length >= 9));
+    } else {
+      const XLSX = (await import('xlsx'));
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const wb = XLSX.read(e.target?.result, { type: 'array' });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const rows = XLSX.utils.sheet_to_json<string[]>(ws, { header: 1 }) as string[][];
+        setBulkNumbers(rows.slice(1).map(r => ({
+          phone: String(r[0] ?? '').replace(/[^0-9]/g, ''),
+          name: String(r[1] ?? ''),
+        })).filter(r => r.phone.length >= 9));
+      };
+      reader.readAsArrayBuffer(file);
+    }
+    setBulkDone(false);
   };
 
   // 카카오 친구톡 발송
@@ -743,6 +875,79 @@ export default function ContentPage() {
       </main>
     );
   }
+
+  // ─ SMS 공용 발송 패널 (SMS/LMS/MMS 세 탭 모두에서 사용) ─
+  const isMmsReady = contentType !== 'mms' || !!mmsImage;
+  const SmsSendPanel = (
+    <div>
+      {/* 단건 발송 */}
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
+        <input value={smsPhone} onChange={e => setSmsPhone(e.target.value)} placeholder="수신번호 01012345678"
+          style={{ flex: 1, padding: '8px 12px', border: '1px solid #E2E8F0', borderRadius: 8, fontSize: 13, fontFamily: 'inherit' }} />
+        <button onClick={sendSMS} disabled={smsSending || !smsPhone || !isMmsReady}
+          style={{ padding: '8px 18px', borderRadius: 8, border: 'none', cursor: (!smsPhone || !isMmsReady || smsSending) ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 700, background: (!smsPhone || !isMmsReady || smsSending) ? '#E2E8F0' : '#191F28', color: (!smsPhone || !isMmsReady || smsSending) ? '#8B95A1' : 'white', whiteSpace: 'nowrap' }}>
+          {smsSending ? '발송 중...' : contentType === 'sms' ? '📱 SMS 발송' : contentType === 'lms' ? '📄 LMS 발송' : '🖼️ MMS 발송'}
+        </button>
+      </div>
+      {smsFeedback && <p style={{ fontSize: 12, fontWeight: 600, color: smsFeedback.startsWith('✅') ? '#00B386' : '#EF4444', marginBottom: 8 }}>{smsFeedback}</p>}
+
+      {/* 일괄 발송 */}
+      <div style={{ borderTop: '1px solid #E2E8F0', paddingTop: 10, marginTop: 4 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+          <p style={{ fontSize: 11, fontWeight: 700, color: '#8B95A1' }}>📋 일괄 발송</p>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '4px 10px', borderRadius: 6, border: '1px dashed #8B95A1', cursor: 'pointer', fontSize: 11, fontWeight: 600, color: '#8B95A1', background: 'white' }}>
+            파일 등록 (CSV/Excel)
+            <input type="file" accept=".csv,.txt,.xlsx,.xls" onChange={e => { const f = e.target.files?.[0]; if (f) parseBulkFile(f); e.target.value = ''; }} style={{ display: 'none' }} />
+          </label>
+          {bulkNumbers.length > 0 && (
+            <>
+              <span style={{ fontSize: 11, color: '#005957', fontWeight: 700 }}>{bulkNumbers.length}건 등록됨</span>
+              <button onClick={() => { setBulkNumbers([]); setBulkDone(false); }} style={{ fontSize: 11, color: '#8B95A1', background: 'none', border: 'none', cursor: 'pointer' }}>지우기</button>
+            </>
+          )}
+        </div>
+
+        {/* 수신번호 목록 미리보기 */}
+        {bulkNumbers.length > 0 && (
+          <div style={{ maxHeight: 120, overflowY: 'auto', background: 'white', border: '1px solid #E2E8F0', borderRadius: 7, padding: '6px 10px', marginBottom: 8, fontSize: 12, color: '#374151' }}>
+            {bulkNumbers.slice(0, 50).map((r, i) => (
+              <div key={i} style={{ padding: '2px 0', borderBottom: i < bulkNumbers.length - 1 ? '1px solid #F2F4F6' : 'none', display: 'flex', gap: 12 }}>
+                <span style={{ color: '#8B95A1', minWidth: 20 }}>{i + 1}</span>
+                <span>{r.phone}</span>
+                {r.name && <span style={{ color: '#8B95A1' }}>{r.name}</span>}
+              </div>
+            ))}
+            {bulkNumbers.length > 50 && <p style={{ color: '#8B95A1', marginTop: 4 }}>... 외 {bulkNumbers.length - 50}건</p>}
+          </div>
+        )}
+
+        {/* 일괄 발송 진행 */}
+        {bulkSending && (
+          <div style={{ marginBottom: 8 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#8B95A1', marginBottom: 4 }}>
+              <span>발송 중 {bulkProgress.done} / {bulkProgress.total}</span>
+              <span style={{ color: '#005957' }}>성공 {bulkProgress.success} · 실패 {bulkProgress.fail}</span>
+            </div>
+            <div style={{ height: 4, background: '#E2E8F0', borderRadius: 4, overflow: 'hidden' }}>
+              <div style={{ height: '100%', background: '#005957', borderRadius: 4, width: `${(bulkProgress.done / bulkProgress.total) * 100}%`, transition: 'width 0.3s' }} />
+            </div>
+          </div>
+        )}
+        {bulkDone && (
+          <p style={{ fontSize: 12, fontWeight: 600, color: '#00B386' }}>
+            ✅ 일괄 발송 완료 — 성공 {bulkProgress.success}건 / 실패 {bulkProgress.fail}건
+          </p>
+        )}
+
+        {bulkNumbers.length > 0 && !bulkSending && !bulkDone && (
+          <button onClick={sendBulk} disabled={!isMmsReady}
+            style={{ width: '100%', padding: '9px', borderRadius: 8, border: 'none', cursor: isMmsReady ? 'pointer' : 'not-allowed', fontSize: 13, fontWeight: 700, background: isMmsReady ? '#005957' : '#E2E8F0', color: isMmsReady ? 'white' : '#8B95A1' }}>
+            {contentType === 'mms' && !mmsImage ? '이미지를 먼저 첨부하세요' : `🚀 ${bulkNumbers.length}건 일괄 발송 시작`}
+          </button>
+        )}
+      </div>
+    </div>
+  );
 
   return (
     <main style={{ minHeight: 'calc(100vh - 56px)', background: '#F8F9FA' }}>
@@ -1124,78 +1329,89 @@ export default function ContentPage() {
                     </div>
                   )}
 
-                  {/* SMS / LMS / MMS 전용 발송 패널 */}
-                  {contentType === 'sms' && activeText && (
+                  {/* SMS 발송 패널 */}
+                  {contentType === 'sms' && activeText && (() => {
+                    const bytes = getByteLen(activeText);
+                    const over = bytes > 90;
+                    return (
+                      <div style={{ marginBottom: 12, padding: '14px 16px', background: '#F8F9FA', borderRadius: 10, border: `1px solid ${over ? '#FCA5A5' : '#E2E8F0'}` }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                          <p style={{ fontSize: 12, fontWeight: 700, color: '#191F28' }}>📱 SMS 발송</p>
+                          <span style={{ fontSize: 11, fontWeight: 700, color: over ? '#DC2626' : '#005957', background: over ? '#FEF2F2' : '#E6F2F2', padding: '3px 10px', borderRadius: 12 }}>
+                            {bytes}바이트 / 90 {over ? '⚠️ 초과 — LMS 탭 사용 권장' : ''}
+                          </span>
+                        </div>
+                        {SmsSendPanel}
+                      </div>
+                    );
+                  })()}
+
+                  {/* LMS 발송 패널 */}
+                  {contentType === 'lms' && activeText && (() => {
+                    const len = activeText.replace(/^제목:.*\n\n?/, '').length;
+                    const over = len > 2000;
+                    return (
+                      <div style={{ marginBottom: 12, padding: '14px 16px', background: '#F8F9FA', borderRadius: 10, border: `1px solid ${over ? '#FCA5A5' : '#E2E8F0'}` }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                          <p style={{ fontSize: 12, fontWeight: 700, color: '#191F28' }}>📄 LMS 발송</p>
+                          <span style={{ fontSize: 11, fontWeight: 700, color: over ? '#DC2626' : '#0A66C2', background: over ? '#FEF2F2' : '#EFF6FF', padding: '3px 10px', borderRadius: 12 }}>
+                            본문 {len}자 / 2,000
+                          </span>
+                        </div>
+                        <input value={msgSubject} onChange={e => setMsgSubject(e.target.value)}
+                          placeholder={`제목 (예: [에픽카] ${contentData?.customer ?? ''} 성과 공유)`}
+                          style={{ width: '100%', padding: '8px 12px', border: '1px solid #E2E8F0', borderRadius: 8, fontSize: 13, fontFamily: 'inherit', marginBottom: 8 }} />
+                        {SmsSendPanel}
+                      </div>
+                    );
+                  })()}
+
+                  {/* MMS 발송 패널 */}
+                  {contentType === 'mms' && activeText && (
                     <div style={{ marginBottom: 12, padding: '14px 16px', background: '#F8F9FA', borderRadius: 10, border: '1px solid #E2E8F0' }}>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-                        <p style={{ fontSize: 12, fontWeight: 700, color: '#191F28' }}>📨 직접 발송</p>
-                        {/* 글자수 / 메시지 타입 배지 */}
-                        {(() => {
-                          const len = activeText.length;
-                          const type = mmsMode ? 'MMS' : len <= 90 ? 'SMS' : 'LMS';
-                          const color = type === 'SMS' ? '#005957' : type === 'LMS' ? '#0A66C2' : '#7C3AED';
-                          const bg    = type === 'SMS' ? '#E6F2F2'  : type === 'LMS' ? '#EFF6FF'  : '#EDE9FE';
-                          return (
-                            <span style={{ fontSize: 11, fontWeight: 700, color, background: bg, padding: '3px 10px', borderRadius: 12 }}>
-                              {type} · {len}자{type === 'SMS' && ` / 90자`}
-                            </span>
-                          );
-                        })()}
+                        <p style={{ fontSize: 12, fontWeight: 700, color: '#191F28' }}>🖼️ MMS 발송</p>
+                        {mmsImage
+                          ? <span style={{ fontSize: 11, fontWeight: 700, color: '#7C3AED', background: '#EDE9FE', padding: '3px 10px', borderRadius: 12 }}>이미지 준비됨 ✅</span>
+                          : <span style={{ fontSize: 11, fontWeight: 600, color: '#B45309', background: '#FFFBEB', padding: '3px 10px', borderRadius: 12 }}>이미지 필수</span>}
                       </div>
 
-                      {/* 전화번호 입력 */}
-                      <input
-                        value={smsPhone}
-                        onChange={e => setSmsPhone(e.target.value)}
-                        placeholder="수신번호 01012345678"
-                        style={{ width: '100%', padding: '8px 12px', border: '1px solid #E2E8F0', borderRadius: 8, fontSize: 13, fontFamily: 'inherit', marginBottom: 10 }}
-                      />
+                      {/* 제목 */}
+                      <input value={msgSubject} onChange={e => setMsgSubject(e.target.value)}
+                        placeholder={`제목 (예: [에픽카] ${contentData?.customer ?? ''} 성과 리포트)`}
+                        style={{ width: '100%', padding: '8px 12px', border: '1px solid #E2E8F0', borderRadius: 8, fontSize: 13, fontFamily: 'inherit', marginBottom: 8 }} />
 
-                      {/* MMS 이미지 영역 (항상 노출) */}
+                      {/* 이미지 섹션 */}
                       <div style={{ marginBottom: 10, padding: '10px 12px', background: '#F0FDF9', borderRadius: 8, border: '1px solid #A7F3D0' }}>
-                        <p style={{ fontSize: 11, fontWeight: 700, color: '#005957', marginBottom: 8 }}>🖼️ MMS 이미지 (선택)</p>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                          <button
-                            onClick={generateMmsImage}
-                            disabled={mmsImageGenerating || !contentData}
-                            style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 14px', borderRadius: 7, border: '1px solid #005957', cursor: mmsImageGenerating ? 'not-allowed' : 'pointer', fontSize: 12, fontWeight: 600, color: '#005957', background: 'white', opacity: mmsImageGenerating ? 0.6 : 1 }}
-                          >
+                        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: mmsImage ? 10 : 0 }}>
+                          <button onClick={generateMmsImage} disabled={mmsImageGenerating || !contentData}
+                            style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 14px', borderRadius: 7, border: '1px solid #005957', cursor: mmsImageGenerating ? 'not-allowed' : 'pointer', fontSize: 12, fontWeight: 600, color: '#005957', background: 'white', opacity: mmsImageGenerating ? 0.6 : 1 }}>
                             {mmsImageGenerating ? '⏳ 생성 중...' : '🎨 성과 카드 자동 생성'}
                           </button>
                           <label style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 12px', borderRadius: 7, border: '1px dashed #8B95A1', cursor: 'pointer', fontSize: 12, fontWeight: 600, color: '#8B95A1', background: 'white' }}>
-                            📁 직접 첨부
+                            📁 파일 첨부
                             <input type="file" accept="image/*" onChange={e => {
-                              const file = e.target.files?.[0];
-                              if (!file) return;
+                              const file = e.target.files?.[0]; if (!file) return;
                               const reader = new FileReader();
-                              reader.onload = () => {
-                                const result = reader.result as string;
-                                setMmsImage({ base64: result.split(',')[1], mime: file.type });
-                                setMmsMode(true);
-                              };
+                              reader.onload = () => { const r = reader.result as string; setMmsImage({ base64: r.split(',')[1], mime: file.type }); };
                               reader.readAsDataURL(file);
                             }} style={{ display: 'none' }} />
                           </label>
-                          {mmsImage ? (
-                            <span style={{ fontSize: 12, color: '#005957', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
-                              ✅ 이미지 준비됨
-                              <button onClick={() => { setMmsImage(null); setMmsMode(false); }} style={{ color: '#8B95A1', background: 'none', border: 'none', cursor: 'pointer', fontSize: 14, lineHeight: 1, padding: 0 }}>×</button>
-                            </span>
-                          ) : (
-                            <span style={{ fontSize: 11, color: '#8B95A1' }}>이미지 없으면 SMS / LMS로 발송</span>
+                          {mmsImage && (
+                            <button onClick={() => setMmsImage(null)} style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid #FCA5A5', background: 'white', color: '#DC2626', fontSize: 11, cursor: 'pointer' }}>삭제</button>
                           )}
                         </div>
+                        {/* ★ 이미지 미리보기 */}
+                        {mmsImage && (
+                          <img
+                            src={`data:${mmsImage.mime};base64,${mmsImage.base64}`}
+                            alt="MMS 이미지 미리보기"
+                            style={{ width: '100%', maxWidth: 340, borderRadius: 8, display: 'block', border: '1px solid #E2E8F0' }}
+                          />
+                        )}
                       </div>
 
-                      {/* 발송 버튼 */}
-                      <button
-                        onClick={sendSMS}
-                        disabled={smsSending || !smsPhone || (mmsMode && !mmsImage)}
-                        style={{ width: '100%', padding: '10px', borderRadius: 8, border: 'none', cursor: (smsSending || !smsPhone || (mmsMode && !mmsImage)) ? 'not-allowed' : 'pointer', fontSize: 14, fontWeight: 700, background: (smsSending || !smsPhone || (mmsMode && !mmsImage)) ? '#E2E8F0' : '#191F28', color: (smsSending || !smsPhone || (mmsMode && !mmsImage)) ? '#8B95A1' : 'white' }}
-                      >
-                        {smsSending ? '발송 중...' : mmsMode && mmsImage ? '🖼️ MMS 발송' : activeText.length > 90 ? '📄 LMS 발송' : '📨 SMS 발송'}
-                      </button>
-                      {smsFeedback && <p style={{ fontSize: 12, fontWeight: 600, color: smsFeedback.startsWith('✅') ? '#00B386' : '#EF4444', marginTop: 8 }}>{smsFeedback}</p>}
+                      {SmsSendPanel}
                     </div>
                   )}
 
