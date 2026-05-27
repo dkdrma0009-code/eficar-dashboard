@@ -8,7 +8,7 @@ import { useMemo } from 'react';
 import {
   Zap, LayoutDashboard, Users, FileText, Sparkles,
   Image, BarChart2, Send, Calendar, BookOpen,
-  GitCompare, Upload, Newspaper,
+  GitCompare, Upload, Newspaper, History,
 } from 'lucide-react';
 
 const SECTIONS = [
@@ -34,6 +34,7 @@ const SECTIONS = [
     label: '관리',
     items: [
       { href: '/campaigns', label: '캠페인',        icon: Send },
+      { href: '/history',   label: '발송 이력',     icon: History },
       { href: '/calendar',  label: '콘텐츠 캘린더', icon: Calendar },
       { href: '/library',   label: '라이브러리',    icon: BookOpen },
     ],

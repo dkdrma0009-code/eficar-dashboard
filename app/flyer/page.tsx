@@ -2,6 +2,7 @@
 
 import { useState, useRef, useCallback } from 'react';
 import { Download, Send, ChevronDown, ChevronUp, Smartphone } from 'lucide-react';
+import { addSendLog } from '@/lib/sendLogStorage';
 
 /* ─────────────────────────── 타입 ─────────────────────────── */
 type TemplateKey = 'gs25_event' | 'wheel_buyback' | 'epichub_recruit' | 'custom_promo';
@@ -367,6 +368,13 @@ export default function FlyerPage() {
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error ?? '발송 실패');
+    addSendLog({
+      channel: 'mms',
+      customer: name || '수신자',
+      receiver_masked: phone.slice(-4).padStart(phone.length, '*'),
+      content_preview: `[안내문] ${subject}`,
+      receipt_num: data.receiptNum,
+    });
     return true;
   }, [mmsSubject]);
 

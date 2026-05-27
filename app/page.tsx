@@ -1,4 +1,3 @@
-// @ts-nocheck
 'use client';
 
 import { useState, useCallback, useMemo, useEffect } from 'react';
@@ -248,7 +247,7 @@ function AIStudio({ data }: { data: DashboardData }) {
     return data.customers.slice(0, 6).map(name => {
       const mem = getMemory(name);
       const stat = viewData.customerStats.find(cs => cs.name === name);
-      return { name, tone: mem?.lastTone, count: mem?.generationCount ?? 0, growthRate: stat?.growthRate ?? 0 };
+      return { name, tone: mem?.lastTone as string | undefined, count: (mem?.generationCount as number) ?? 0, growthRate: stat?.growthRate ?? 0 };
     }).filter(t => t.count > 0);
   }, [data.customers, viewData.customerStats]);
 
@@ -621,7 +620,7 @@ function AIStudio({ data }: { data: DashboardData }) {
                   return (
                     <div
                       key={i}
-                      onClick={() => router.push('/intelligence')}
+                      onClick={() => router.push('/ai-coach')}
                       style={{ flex: 1, borderRadius: 10, border: `1px solid ${colors.border}`, background: colors.bg, padding: '10px 14px', cursor: 'pointer', minWidth: 0 }}
                     >
                       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6 }}>
@@ -634,7 +633,7 @@ function AIStudio({ data }: { data: DashboardData }) {
               </div>
               {/* Intelligence 바로가기 */}
               <button
-                onClick={() => router.push('/intelligence')}
+                onClick={() => router.push('/ai-coach')}
                 style={{ padding: '10px 16px', borderRadius: 10, border: '1px solid #E8ECEF', background: 'white', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, flexShrink: 0 }}
               >
                 <Brain style={{ width: 18, height: 18, color: '#7C3AED' }} />
@@ -1013,7 +1012,7 @@ function AIStudio({ data }: { data: DashboardData }) {
             {/* AI Operations Center 카드 */}
             <div
               className="card"
-              onClick={() => router.push('/operations')}
+              onClick={() => router.push('/campaigns')}
               style={{ padding: '14px 18px', cursor: 'pointer', background: 'linear-gradient(135deg, #1E293B 0%, #334155 100%)', border: 'none' }}
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
@@ -1100,7 +1099,7 @@ function AIStudio({ data }: { data: DashboardData }) {
                             </button>
                           )}
                           <button
-                            onClick={() => router.push(item.href)}
+                            onClick={() => item.href && router.push(item.href)}
                             style={{ padding: '3px 9px', borderRadius: 6, border: '1px solid #E8ECEF', background: 'white', color: '#4A5568', fontSize: 10, fontWeight: 600, cursor: 'pointer' }}
                           >
                             이어하기 →
@@ -1126,7 +1125,7 @@ function AIStudio({ data }: { data: DashboardData }) {
                     <div key={t.name} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <p style={{ fontSize: 12, fontWeight: 700, color: '#191F28', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.name}</p>
-                        {t.tone && <p style={{ fontSize: 10, color: '#8B95A1' }}>{t.tone} 톤 · {t.count}회 생성</p>}
+                        {t.tone && <p style={{ fontSize: 10, color: '#8B95A1' }}>{String(t.tone)} 톤 · {t.count}회 생성</p>}
                       </div>
                       <button
                         onClick={() => setDrawerCtx({ customer: t.name, action: 'message', growthRate: t.growthRate })}
