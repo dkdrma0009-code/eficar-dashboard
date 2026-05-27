@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { callGemini } from '@/lib/gemini';
 
 export const runtime = 'nodejs';
 
@@ -18,9 +19,6 @@ function parseGeminiJSON(text: string): NextResponse {
 }
 
 export async function POST(req: NextRequest) {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) return NextResponse.json({ error: 'GEMINI_API_KEY 없음' }, { status: 500 });
-
   const body = await req.json();
   const { month, salesStats, contentStats, campaignStats } = body;
 
@@ -42,25 +40,11 @@ export async function POST(req: NextRequest) {
 응답은 반드시 순수 JSON만 출력하세요. 설명, 마크다운, 코드블록 없이:
 {"executiveSummary":"임원 요약 (3-4문장, 이달 전체 마케팅 상황 한눈에)","salesAnalysis":"매출 분석 (수치 인용, 고객사별 추정 언급)","contentActivity":"콘텐츠 활동 (채널별 건수, 주요 내용 추정, 없으면 개선안)","campaignResult":"캠페인 성과 (발송→전환 흐름, 전환율 해석)","issues":"문제점 및 인사이트 (3가지 이상 bullet 형식으로, 각 항목은 \\n으로 구분)","nextPlan":"다음 달 실행 계획 (구체적 액션 3가지 이상, 각 항목은 \\n으로 구분)"}`;
 
-  const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { temperature: 0.4, maxOutputTokens: 8192 },
-      }),
-    },
-  );
-
-  if (!res.ok) {
-    const err = await res.text();
-    return NextResponse.json({ error: `Gemini 오류: ${err}` }, { status: res.status });
+  let text: string;
+  try {
+    text = await callGemini(prompt, { temperature: 0.4, maxOutputTokens: 8192 });
+  } catch (e) {
+    return NextResponse.json({ error: String(e) }, { status: 503 });
   }
-
-  const result = await res.json();
-  const parts: { text?: string; thought?: boolean }[] = result.candidates?.[0]?.content?.parts ?? [];
-  const text = parts.filter(p => !p.thought).map(p => p.text ?? '').join('');
   return parseGeminiJSON(text);
 }

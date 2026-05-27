@@ -1,17 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { correctKoreanParticles } from '@/lib/koreanParticles';
+import { callGemini } from '@/lib/gemini';
 
 export const runtime = 'nodejs';
 
 export async function POST(req: NextRequest) {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) {
-    return NextResponse.json(
-      { error: 'GEMINI_API_KEY가 설정되지 않았습니다. .env.local 파일에 추가해주세요.\n발급: https://aistudio.google.com/app/apikey' },
-      { status: 500 },
-    );
-  }
-
   const { type, customer, month, currentSales, prevGrowth, isOngoing, isB2C, totalSales, savingsStr, topItem, monthsActive, missing, campaignHistory, proposalContext } = await req.json();
   if (!type) return NextResponse.json({ error: '콘텐츠 유형을 입력해주세요.' }, { status: 400 });
 
@@ -100,25 +93,11 @@ ${typeFormats[type] ?? '충분히 길고 상세하게 작성'}
 
 반드시 문구 텍스트만 반환 (제목·설명·마크다운 기호 없이 순수 텍스트).`;
 
-  const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { temperature: 0.8, maxOutputTokens: 4096 },
-      }),
-    },
-  );
-
-  if (!res.ok) {
-    const err = await res.text();
-    return NextResponse.json({ error: `Gemini API 오류: ${err}` }, { status: res.status });
+  let text: string;
+  try {
+    text = await callGemini(prompt, { temperature: 0.8, maxOutputTokens: 4096 });
+  } catch (e) {
+    return NextResponse.json({ error: String(e) }, { status: 503 });
   }
-
-  const result = await res.json();
-  const parts: { text?: string; thought?: boolean }[] = result.candidates?.[0]?.content?.parts ?? [];
-  const text: string = parts.filter(p => !p.thought).map(p => p.text ?? '').join('');
   return NextResponse.json({ text: correctKoreanParticles(text) });
 }

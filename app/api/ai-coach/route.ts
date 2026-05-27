@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { callGemini } from '@/lib/gemini';
 
 export const runtime = 'nodejs';
 
@@ -33,9 +34,6 @@ interface CampaignStat {
 }
 
 export async function POST(req: NextRequest) {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) return NextResponse.json({ error: 'GEMINI_API_KEY 없음' }, { status: 500 });
-
   const { month, customers, campaigns }: {
     month: string;
     customers: CustomerStat[];
@@ -116,26 +114,12 @@ ${campaignSummary}
   "summary": "전체 영업 상황 2~3문장 요약"
 }`;
 
-  const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { temperature: 0.4, maxOutputTokens: 8192 },
-      }),
-    },
-  );
-
-  if (!res.ok) {
-    const err = await res.text();
-    return NextResponse.json({ error: `Gemini 오류: ${err}` }, { status: res.status });
+  let text: string;
+  try {
+    text = await callGemini(prompt, { temperature: 0.4, maxOutputTokens: 8192 });
+  } catch (e) {
+    return NextResponse.json({ error: String(e) }, { status: 503 });
   }
-
-  const result = await res.json();
-  const parts: { text?: string; thought?: boolean }[] = result.candidates?.[0]?.content?.parts ?? [];
-  const text = parts.filter(p => !p.thought).map(p => p.text ?? '').join('');
   const parsed = parseGeminiJSON(text);
   if (!parsed) return NextResponse.json({ error: '파싱 실패', raw: text }, { status: 500 });
   return NextResponse.json(parsed);

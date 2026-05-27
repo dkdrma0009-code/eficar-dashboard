@@ -71,15 +71,13 @@ export default function Sidebar() {
     }}>
 
       {/* 로고 */}
-      <div style={{ padding: '18px 16px 14px', borderBottom: '1px solid #F2F4F6' }}>
+      <div style={{ padding: '20px 18px 16px', borderBottom: '1px solid #F2F4F6' }}>
         <button
           onClick={() => { setData(null); setFileName(''); router.push('/'); }}
-          style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'none', border: 'none', cursor: 'pointer', padding: 0, width: '100%' }}
+          style={{ display: 'flex', flexDirection: 'column', gap: 4, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
         >
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            <img src="/eficar_logo.png" alt="에픽카" style={{ height: 28, width: 'auto', display: 'block' }} />
-            <p style={{ fontSize: 11, color: '#8B95A1', lineHeight: 1.3, fontWeight: 500, margin: 0 }}>AI 마케팅 시스템</p>
-          </div>
+          <img src="/eficar_logo.png" alt="에픽카" style={{ height: 22, width: 'auto', display: 'block' }} />
+          <span style={{ fontSize: 10, color: '#8B95A1', fontWeight: 500 }}>AI 마케팅 시스템</span>
         </button>
       </div>
 

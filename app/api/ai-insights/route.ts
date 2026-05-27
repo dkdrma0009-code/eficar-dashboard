@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { callGemini } from '@/lib/gemini';
 
 export const runtime = 'nodejs';
 
@@ -22,9 +23,6 @@ interface CustomerStat {
 }
 
 export async function POST(req: NextRequest) {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) return NextResponse.json({ error: 'GEMINI_API_KEY 없음' }, { status: 500 });
-
   const {
     month,
     customers,
@@ -89,25 +87,11 @@ ${contextNotes}
 응답은 반드시 순수 JSON만 출력하세요. 설명·마크다운·코드블록 없이 아래 형식 그대로:
 {"achievement":"한 문장 (최고 성과 또는 이달 핵심 성과를 수치와 함께)","warning":"한 문장 (가장 긴급한 위험 — 거래 중단 고객 있으면 반드시 명시)","opportunity":"한 문장 (성장 가능성 또는 재활성화 기회)","action":"한 문장 (이번 주 안에 해야 할 구체적 액션 1가지)"}`;
 
-  const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { temperature: 0.4, maxOutputTokens: 1024 },
-      }),
-    },
-  );
-
-  if (!res.ok) {
-    const err = await res.text();
-    return NextResponse.json({ error: `Gemini 오류: ${err}` }, { status: res.status });
+  let text: string;
+  try {
+    text = await callGemini(prompt, { temperature: 0.4, maxOutputTokens: 1024 });
+  } catch (e) {
+    return NextResponse.json({ error: String(e) }, { status: 503 });
   }
-
-  const result = await res.json();
-  const parts: { text?: string; thought?: boolean }[] = result.candidates?.[0]?.content?.parts ?? [];
-  const text = parts.filter(p => !p.thought).map(p => p.text ?? '').join('');
   return parseGeminiJSON(text);
 }

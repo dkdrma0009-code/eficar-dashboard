@@ -27,7 +27,7 @@ const NAV = [
 export function EficarLogo() {
   return (
     <div style={{ display: 'flex', alignItems: 'center' }}>
-      <img src="/eficar_logo.png" alt="에픽카" style={{ height: 26, width: 'auto' }} />
+      <img src="/eficar_logo.png" alt="에픽카" style={{ height: 24, width: 'auto' }} />
     </div>
   );
 }

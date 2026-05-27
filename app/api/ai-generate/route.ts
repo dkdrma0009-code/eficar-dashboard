@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import type { CardItem, CardFormInput, CardLayout } from '@/app/cardnews/types';
 import { correctParticlesDeep } from '@/lib/koreanParticles';
+import { callGemini } from '@/lib/gemini';
 
 export const runtime = 'nodejs';
 
@@ -266,41 +267,8 @@ function makeFallback(layout: CardLayout): CardItem {
   }
 }
 
-async function callGemini(prompt: string, apiKey: string) {
-  const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { temperature: 0.7, maxOutputTokens: 8192 },
-      }),
-    },
-  );
-
-  if (!res.ok) {
-    const err = await res.text();
-    throw new Error(`Gemini API HTTP ${res.status}: ${err.slice(0, 300)}`);
-  }
-
-  const result = await res.json();
-  const candidate = result.candidates?.[0];
-  const parts: { text?: string; thought?: boolean }[] = candidate?.content?.parts ?? [];
-  const rawText = parts.filter(p => !p.thought).map(p => p.text ?? '').join('');
-  const finishReason: string = candidate?.finishReason ?? 'UNKNOWN';
-  return { rawText, finishReason };
-}
 
 export async function POST(req: NextRequest) {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) {
-    return NextResponse.json(
-      { error: 'GEMINI_API_KEY가 설정되지 않았습니다.' },
-      { status: 500 },
-    );
-  }
-
   const body = await req.json() as Partial<CardFormInput>;
   const { topic, cardCount = 7, targetCustomer, metric1, metric2, metric3, keyMessage } = body;
 
@@ -321,17 +289,12 @@ export async function POST(req: NextRequest) {
   const expectedSequence = getSequence(count);
   const prompt = buildPrompt(input);
 
-  console.log(`[ai-generate] topic="${topic}" count=${count}`);
-
   let rawText: string;
-  let finishReason: string;
   try {
-    ({ rawText, finishReason } = await callGemini(prompt, apiKey));
+    rawText = await callGemini(prompt, { temperature: 0.7, maxOutputTokens: 8192 });
   } catch (e) {
-    return NextResponse.json({ error: String(e) }, { status: 500 });
+    return NextResponse.json({ error: String(e) }, { status: 503 });
   }
-
-  console.log(`[ai-generate] finishReason=${finishReason} rawLen=${rawText.length}`);
 
   const extracted = extractJSON(rawText);
   let parsed: unknown = null;

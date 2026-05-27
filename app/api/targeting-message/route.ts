@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { correctParticlesDeep } from '@/lib/koreanParticles';
+import { callGemini } from '@/lib/gemini';
 
 export const runtime = 'nodejs';
 
@@ -102,11 +103,6 @@ function extractJSON(raw: string): string {
 }
 
 export async function POST(req: NextRequest) {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) {
-    return NextResponse.json({ error: 'GEMINI_API_KEY가 설정되지 않았습니다.' }, { status: 500 });
-  }
-
   const input: TargetingInput = await req.json();
   if (!input.customerName) {
     return NextResponse.json({ error: '고객사명이 필요합니다.' }, { status: 400 });
@@ -114,26 +110,12 @@ export async function POST(req: NextRequest) {
 
   const prompt = buildPrompt(input);
 
-  const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { temperature: 0.7, maxOutputTokens: 4096 },
-      }),
-    },
-  );
-
-  if (!res.ok) {
-    const err = await res.text();
-    return NextResponse.json({ error: `Gemini API 오류: ${err.slice(0, 200)}` }, { status: 500 });
+  let rawText: string;
+  try {
+    rawText = await callGemini(prompt, { temperature: 0.7, maxOutputTokens: 4096 });
+  } catch (e) {
+    return NextResponse.json({ error: String(e) }, { status: 503 });
   }
-
-  const result = await res.json();
-  const parts: { text?: string; thought?: boolean }[] = result.candidates?.[0]?.content?.parts ?? [];
-  const rawText = parts.filter(p => !p.thought).map(p => p.text ?? '').join('');
 
   let parsed: unknown = null;
   try { parsed = JSON.parse(extractJSON(rawText)); } catch { /* */ }
