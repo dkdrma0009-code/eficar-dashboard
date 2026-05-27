@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useCallback } from 'react';
-import { Download, Send, ChevronDown, ChevronUp } from 'lucide-react';
+import { Download, Send, ChevronDown, ChevronUp, Smartphone } from 'lucide-react';
 
 /* ─────────────────────────── 타입 ─────────────────────────── */
 type TemplateKey = 'gs25_event' | 'wheel_buyback' | 'epichub_recruit' | 'custom_promo';
@@ -294,6 +294,16 @@ export default function FlyerPage() {
   const [expanded, setExpanded] = useState(true);
   const previewRef = useRef<HTMLDivElement>(null);
 
+  // MMS 발송 상태
+  const [mmsSubject, setMmsSubject] = useState('');
+  const [mmsPhone, setMmsPhone] = useState('');
+  const [mmsSending, setMmsSending] = useState(false);
+  const [mmsFeedback, setMmsFeedback] = useState('');
+  const [bulkNumbers, setBulkNumbers] = useState<{ phone: string; name: string }[]>([]);
+  const [bulkSending, setBulkSending] = useState(false);
+  const [bulkProgress, setBulkProgress] = useState({ done: 0, total: 0, success: 0, fail: 0 });
+  const [bulkDone, setBulkDone] = useState(false);
+
   // 각 템플릿 상태
   const [gs25, setGs25] = useState<Gs25EventData>({
     partName: '시트', couponAmount: '5000', targetCompany: 'SK렌터카',
@@ -327,6 +337,91 @@ export default function FlyerPage() {
       setDownloading(false);
     }
   }, [selected]);
+
+  // 이미지 캡처 후 단건 MMS 발송
+  const sendMms = useCallback(async (phone: string, name: string) => {
+    if (!previewRef.current || !phone) return false;
+    const dataUrl = await captureElement(previewRef.current);
+    const base64 = dataUrl.split(',')[1];
+    const subject = mmsSubject || '에픽카 안내문';
+    const content = `[에픽카] ${subject}\n자세한 내용은 이미지를 확인해 주세요.\n문의: 010-2752-1054`;
+    const res = await fetch('/api/popbill/sms', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        receiver: phone.replace(/-/g, ''),
+        receiverName: name || '수신자',
+        subject,
+        content,
+        imageBase64: base64,
+        imageMimeType: 'image/jpeg',
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error ?? '발송 실패');
+    return true;
+  }, [mmsSubject]);
+
+  // 단건 발송 핸들러
+  const handleSendSingle = async () => {
+    if (!mmsPhone) return;
+    setMmsSending(true);
+    setMmsFeedback('');
+    try {
+      await sendMms(mmsPhone, '');
+      setMmsFeedback('✅ MMS 발송 완료');
+    } catch (e) {
+      setMmsFeedback(`❌ ${e instanceof Error ? e.message : '발송 실패'}`);
+    } finally {
+      setMmsSending(false);
+    }
+  };
+
+  // 대량 발송
+  const handleSendBulk = async () => {
+    if (!bulkNumbers.length) return;
+    setBulkSending(true);
+    setBulkDone(false);
+    setBulkProgress({ done: 0, total: bulkNumbers.length, success: 0, fail: 0 });
+    for (const { phone, name } of bulkNumbers) {
+      try {
+        await sendMms(phone, name);
+        setBulkProgress(p => ({ ...p, done: p.done + 1, success: p.success + 1 }));
+      } catch {
+        setBulkProgress(p => ({ ...p, done: p.done + 1, fail: p.fail + 1 }));
+      }
+      await new Promise(r => setTimeout(r, 400));
+    }
+    setBulkSending(false);
+    setBulkDone(true);
+  };
+
+  // 수신번호 파일 파싱
+  const parseBulkFile = async (file: File) => {
+    const isCsv = /\.(csv|txt)$/i.test(file.name);
+    if (isCsv) {
+      const text = await file.text();
+      const rows = text.split('\n').map(l => l.trim()).filter(l => /\d{9,11}/.test(l));
+      setBulkNumbers(rows.map(l => {
+        const parts = l.split(',');
+        return { phone: parts[0].replace(/[^0-9]/g, ''), name: parts[1]?.trim() ?? '' };
+      }).filter(r => r.phone.length >= 9));
+    } else {
+      const XLSX = await import('xlsx');
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const wb = XLSX.read(e.target?.result, { type: 'array' });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const rows = XLSX.utils.sheet_to_json<string[]>(ws, { header: 1 }) as string[][];
+        setBulkNumbers(rows.slice(1).map(r => ({
+          phone: String(r[0] ?? '').replace(/[^0-9]/g, ''),
+          name: String(r[1] ?? ''),
+        })).filter(r => r.phone.length >= 9));
+      };
+      reader.readAsArrayBuffer(file);
+    }
+    setBulkDone(false);
+  };
 
   const inputStyle: React.CSSProperties = {
     width: '100%', padding: '8px 10px', border: '1px solid #E5E7EB', borderRadius: 6,
@@ -472,12 +567,105 @@ export default function FlyerPage() {
 
             {/* 다운로드 버튼 */}
             <button onClick={handleDownload} disabled={downloading}
-              style={{ marginTop: 20, width: '100%', padding: '12px', borderRadius: 8, border: 'none', background: '#005957', color: 'white', fontSize: 14, fontWeight: 700, cursor: downloading ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: downloading ? 0.7 : 1 }}>
-              <Download style={{ width: 16, height: 16 }} />
-              {downloading ? '이미지 저장 중...' : 'JPG 이미지 다운로드'}
+              style={{ marginTop: 20, width: '100%', padding: '11px', borderRadius: 8, border: '1px solid #D1D5DB', background: 'white', color: '#374151', fontSize: 13, fontWeight: 600, cursor: downloading ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: downloading ? 0.7 : 1 }}>
+              <Download style={{ width: 15, height: 15 }} />
+              {downloading ? '저장 중...' : 'JPG 다운로드'}
             </button>
-            <div style={{ marginTop: 8, fontSize: 11, color: '#8B95A1', textAlign: 'center' }}>
-              다운로드 후 콘텐츠 생성기의 MMS 탭에서 이미지 첨부 → 발송
+
+            {/* ─── MMS 바로 발송 ─── */}
+            <div style={{ marginTop: 16, padding: '14px 16px', background: '#F0FDF9', borderRadius: 10, border: '1px solid #A7F3D0' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12 }}>
+                <Smartphone style={{ width: 15, height: 15, color: '#005957' }} />
+                <span style={{ fontSize: 13, fontWeight: 800, color: '#005957' }}>MMS 바로 발송</span>
+                <span style={{ fontSize: 10, color: '#6B7280', background: '#E6F2F2', padding: '2px 7px', borderRadius: 10 }}>현재 안내문 이미지로 발송</span>
+              </div>
+
+              {/* 발신번호 */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, padding: '6px 10px', background: 'white', borderRadius: 7, border: '1px solid #E5E7EB' }}>
+                <span style={{ fontSize: 11, color: '#8B95A1', fontWeight: 600 }}>발신번호</span>
+                <span style={{ fontSize: 13, fontWeight: 700, color: '#191F28' }}>010-7519-1054</span>
+              </div>
+
+              {/* 제목 */}
+              <input value={mmsSubject} onChange={e => setMmsSubject(e.target.value)}
+                placeholder="MMS 제목 (예: GS25 시트 교환 이벤트 안내)"
+                style={{ width: '100%', padding: '8px 10px', border: '1px solid #E5E7EB', borderRadius: 7, fontSize: 13, fontFamily: 'inherit', marginBottom: 8, background: 'white', outline: 'none', boxSizing: 'border-box' }} />
+
+              {/* 단건 발송 */}
+              <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
+                <input value={mmsPhone} onChange={e => setMmsPhone(e.target.value)}
+                  placeholder="수신번호 (01012345678)"
+                  style={{ flex: 1, padding: '8px 10px', border: '1px solid #E5E7EB', borderRadius: 7, fontSize: 13, fontFamily: 'inherit', background: 'white', outline: 'none' }} />
+                <button onClick={handleSendSingle} disabled={mmsSending || !mmsPhone}
+                  style={{ padding: '8px 16px', borderRadius: 7, border: 'none', cursor: (mmsSending || !mmsPhone) ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 700, background: (mmsSending || !mmsPhone) ? '#E5E7EB' : '#191F28', color: (mmsSending || !mmsPhone) ? '#9CA3AF' : 'white', whiteSpace: 'nowrap' }}>
+                  {mmsSending ? '발송 중...' : '발송'}
+                </button>
+              </div>
+              {mmsFeedback && (
+                <p style={{ fontSize: 12, fontWeight: 700, color: mmsFeedback.startsWith('✅') ? '#00B386' : '#EF4444', marginBottom: 8 }}>{mmsFeedback}</p>
+              )}
+
+              {/* 대량 발송 */}
+              <div style={{ padding: '10px 12px', background: 'white', borderRadius: 8, border: '1px solid #E5E7EB' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: bulkNumbers.length > 0 ? 8 : 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: '#6B7280' }}>수신번호 대량 등록</span>
+                    {bulkNumbers.length > 0 && (
+                      <span style={{ fontSize: 11, fontWeight: 700, color: '#005957', background: '#E6F2F2', padding: '2px 8px', borderRadius: 10 }}>{bulkNumbers.length}건</span>
+                    )}
+                  </div>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <label style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid #005957', cursor: 'pointer', fontSize: 11, fontWeight: 600, color: '#005957', background: 'white' }}>
+                      📂 파일 등록
+                      <input type="file" accept=".csv,.txt,.xlsx,.xls" onChange={e => { const f = e.target.files?.[0]; if (f) parseBulkFile(f); e.target.value = ''; }} style={{ display: 'none' }} />
+                    </label>
+                    {bulkNumbers.length > 0 && (
+                      <button onClick={() => { setBulkNumbers([]); setBulkDone(false); }} style={{ padding: '4px 8px', borderRadius: 6, border: '1px solid #E5E7EB', background: 'white', color: '#9CA3AF', fontSize: 11, cursor: 'pointer' }}>초기화</button>
+                    )}
+                  </div>
+                </div>
+
+                {bulkNumbers.length > 0 && (
+                  <div style={{ maxHeight: 100, overflowY: 'auto', background: '#F9FAFB', border: '1px solid #E5E7EB', borderRadius: 6, fontSize: 12, marginBottom: 8 }}>
+                    <div style={{ padding: '4px 8px', background: '#F3F4F6', borderBottom: '1px solid #E5E7EB', display: 'flex', gap: 16, fontSize: 11, fontWeight: 700, color: '#6B7280' }}>
+                      <span style={{ minWidth: 24 }}>No</span><span style={{ minWidth: 100 }}>전화번호</span><span>이름</span>
+                    </div>
+                    {bulkNumbers.slice(0, 30).map((r, i) => (
+                      <div key={i} style={{ padding: '3px 8px', borderBottom: '1px solid #F3F4F6', display: 'flex', gap: 16 }}>
+                        <span style={{ color: '#9CA3AF', minWidth: 24 }}>{i + 1}</span>
+                        <span style={{ minWidth: 100 }}>{r.phone}</span>
+                        <span style={{ color: '#9CA3AF' }}>{r.name || '—'}</span>
+                      </div>
+                    ))}
+                    {bulkNumbers.length > 30 && <p style={{ padding: '3px 8px', color: '#9CA3AF', fontSize: 11 }}>... 외 {bulkNumbers.length - 30}건</p>}
+                  </div>
+                )}
+
+                {bulkSending && (
+                  <div style={{ marginBottom: 8 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, marginBottom: 3 }}>
+                      <span style={{ color: '#6B7280' }}>발송 중 {bulkProgress.done}/{bulkProgress.total}</span>
+                      <span style={{ color: '#005957', fontWeight: 700 }}>성공 {bulkProgress.success} · <span style={{ color: '#EF4444' }}>실패 {bulkProgress.fail}</span></span>
+                    </div>
+                    <div style={{ height: 5, background: '#E5E7EB', borderRadius: 3, overflow: 'hidden' }}>
+                      <div style={{ height: '100%', background: '#005957', borderRadius: 3, width: `${(bulkProgress.done / bulkProgress.total) * 100}%`, transition: 'width 0.3s' }} />
+                    </div>
+                  </div>
+                )}
+                {bulkDone && <p style={{ fontSize: 12, fontWeight: 700, color: '#00B386', marginBottom: 6 }}>✅ 완료 — 성공 {bulkProgress.success}건 · 실패 {bulkProgress.fail}건</p>}
+
+                {bulkNumbers.length > 0 && !bulkSending && !bulkDone && (
+                  <button onClick={handleSendBulk}
+                    style={{ width: '100%', padding: '9px', borderRadius: 7, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 700, background: '#005957', color: 'white' }}>
+                    🚀 {bulkNumbers.length}건 일괄 발송
+                  </button>
+                )}
+                {bulkNumbers.length === 0 && (
+                  <p style={{ fontSize: 11, color: '#9CA3AF', textAlign: 'center', padding: '2px 0' }}>
+                    CSV/Excel: A열=전화번호, B열=이름(선택)
+                  </p>
+                )}
+              </div>
             </div>
           </div>
 
