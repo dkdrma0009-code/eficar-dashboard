@@ -10,6 +10,16 @@ declare module 'popbill' {
     MessageService(): MessageService;
     KakaoService(): KakaoService;
   }
+  interface MsgSearchResult {
+    code: number; total: number; perPage: number; pageNum: number; pageCount: number;
+    list: Array<{
+      receiptNum: string; requestNum: string; state: number; messageType: string;
+      sendNum: string; receiveNum: string; receiveName: string;
+      content: string; subject: string; sendDT: string; resultDT: string;
+      result: string; resultMessage: string;
+      imageURL?: string;
+    }>;
+  }
   interface MessageService {
     sendSMS(
       corpNum: string, sender: string, receiver: string, receiverName: string,
@@ -28,6 +38,13 @@ declare module 'popbill' {
       subject: string, content: string, filePath: string,
       reserveDT: string | null, adsYN: boolean, requestNum: string | null,
       success: (result: { receiptNum: string }) => void,
+      error: (err: { code: number; message: string }) => void,
+    ): void;
+    search(
+      corpNum: string, sDate: string, eDate: string, msgTypes: string[],
+      reserveYN: string | null, senderYN: string | null,
+      page: number, perPage: number, order: string | null,
+      success: (result: MsgSearchResult) => void,
       error: (err: { code: number; message: string }) => void,
     ): void;
     getBalance(corpNum: string, success: (bal: number) => void, error: (err: unknown) => void): void;
