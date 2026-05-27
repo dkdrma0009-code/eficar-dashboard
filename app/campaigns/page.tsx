@@ -5,6 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import { Plus, X, Check, Send, Upload, AlertCircle, Bell, Mail, Clock, Brain, TrendingUp, TrendingDown } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { getCampaigns, addCampaign, updateCampaign, deleteCampaign, isDuplicateCampaign, type CampaignRecord, type CampaignChannel, type CampaignOutcome } from '@/lib/campaignStorage';
+import { getSendLogs, type SendLog } from '@/lib/sendLogStorage';
 import { useDashboardData } from '@/lib/DataContext';
 
 const CHANNELS: { value: CampaignChannel; label: string; emoji: string }[] = [
@@ -68,9 +69,14 @@ export default function CampaignsPage() {
     if (c) { setForm(prev => ({ ...prev, customer: c })); setShowForm(true); }
   }, []);
 
-  const [viewMode, setViewMode] = useState<'grouped' | 'list'>('grouped');
+  const [viewMode, setViewMode] = useState<'grouped' | 'list' | 'sendlogs'>('grouped');
   const [expandedGroup, setExpandedGroup] = useState<string | null>(null);
   const [filterCustomer, setFilterCustomer] = useState<string>('all');
+  const [sendLogs, setSendLogs] = useState<SendLog[]>([]);
+
+  useEffect(() => {
+    getSendLogs(undefined, 100).then(setSendLogs);
+  }, []);
 
   const filtered = useMemo(() =>
     records.filter(r => filterOutcome === 'all' || r.outcome === filterOutcome),
@@ -449,12 +455,12 @@ export default function CampaignsPage() {
             </button>
           ))}
           <div style={{ marginLeft: 'auto', display: 'flex', gap: 4, background: '#F2F4F6', borderRadius: 8, padding: 3 }}>
-            {(['grouped', 'list'] as const).map(v => (
+            {(['grouped', 'list', 'sendlogs'] as const).map(v => (
               <button key={v} onClick={() => setViewMode(v)}
                 style={{ padding: '4px 12px', borderRadius: 6, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600,
                   background: viewMode === v ? 'white' : 'transparent', color: viewMode === v ? '#191F28' : '#8B95A1',
                   boxShadow: viewMode === v ? '0 1px 3px rgba(0,0,0,0.08)' : 'none' }}>
-                {v === 'grouped' ? '그룹' : '전체'}
+                {v === 'grouped' ? '그룹' : v === 'list' ? '전체' : '📡 발송 로그'}
               </button>
             ))}
           </div>
@@ -578,6 +584,62 @@ export default function CampaignsPage() {
                 </div>
               );
             })}
+          </div>
+        )}
+
+        {/* 발송 로그 뷰 */}
+        {viewMode === 'sendlogs' && (
+          <div>
+            {/* 통계 요약 */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 16 }}>
+              {[
+                { label: '총 발송', value: sendLogs.length, color: '#191F28' },
+                { label: '열람', value: sendLogs.filter(l => l.open_at).length, sub: sendLogs.length ? `${Math.round(sendLogs.filter(l => l.open_at).length / sendLogs.length * 100)}%` : '-', color: '#0A66C2' },
+                { label: '클릭', value: sendLogs.filter(l => l.click_at).length, sub: sendLogs.length ? `${Math.round(sendLogs.filter(l => l.click_at).length / sendLogs.length * 100)}%` : '-', color: '#005957' },
+              ].map(s => (
+                <div key={s.label} className="card" style={{ padding: '14px 18px', textAlign: 'center' }}>
+                  <p style={{ fontSize: 11, color: '#8B95A1', fontWeight: 600, marginBottom: 4 }}>{s.label}</p>
+                  <p style={{ fontSize: 24, fontWeight: 800, color: s.color }}>{s.value}</p>
+                  {s.sub && <p style={{ fontSize: 12, color: s.color, fontWeight: 600 }}>{s.sub}</p>}
+                </div>
+              ))}
+            </div>
+
+            {sendLogs.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '60px 0', color: '#8B95A1' }}>
+                <p style={{ fontSize: 32, marginBottom: 12 }}>📡</p>
+                <p style={{ fontSize: 14, fontWeight: 600 }}>발송 로그가 없습니다</p>
+                <p style={{ fontSize: 12, marginTop: 4 }}>콘텐츠 페이지에서 SMS·카카오·이메일 발송 시 자동 기록됩니다</p>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {sendLogs.map(log => {
+                  const channelLabel = { sms: 'SMS', lms: 'LMS', mms: 'MMS', kakao: '카카오', email: '이메일' }[log.channel] ?? log.channel;
+                  const channelEmoji = { sms: '📨', lms: '📄', mms: '🖼️', kakao: '💬', email: '📧' }[log.channel] ?? '📤';
+                  return (
+                    <div key={log.id} className="card" style={{ padding: '12px 18px', display: 'flex', alignItems: 'center', gap: 14 }}>
+                      <span style={{ fontSize: 11, color: '#8B95A1', fontWeight: 600, minWidth: 80 }}>{log.sent_at.slice(0, 16).replace('T', ' ')}</span>
+                      <span style={{ fontSize: 16 }}>{channelEmoji}</span>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <p style={{ fontSize: 13, fontWeight: 700, color: '#191F28' }}>{log.customer || '—'} <span style={{ fontSize: 11, fontWeight: 500, color: '#8B95A1' }}>{channelLabel}</span></p>
+                        <p style={{ fontSize: 11, color: '#8B95A1', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{log.content_preview}</p>
+                      </div>
+                      <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                        {log.open_at && (
+                          <span style={{ fontSize: 11, fontWeight: 600, color: '#0A66C2', background: '#EFF6FF', padding: '3px 8px', borderRadius: 12 }}>👁 열람</span>
+                        )}
+                        {log.click_at && (
+                          <span style={{ fontSize: 11, fontWeight: 600, color: '#005957', background: '#E6F2F2', padding: '3px 8px', borderRadius: 12 }}>🖱 클릭</span>
+                        )}
+                        {!log.open_at && !log.click_at && (
+                          <span style={{ fontSize: 11, fontWeight: 600, color: '#8B95A1', background: '#F2F4F6', padding: '3px 8px', borderRadius: 12 }}>발송됨</span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         )}
 
