@@ -10,9 +10,10 @@ const TYPE_META: Record<LibraryContentType, { label: string; emoji: string; colo
   email:    { label: '이메일',     emoji: '📧', color: '#DC2626', bg: '#FEF2F2' },
   card:     { label: '성과 카드',  emoji: '📊', color: '#005957', bg: '#E6F2F2' },
   cardnews: { label: '카드뉴스',   emoji: '🃏', color: '#6366F1', bg: '#EEF2FF' },
+  sms:      { label: 'SMS/LMS/MMS', emoji: '📨', color: '#7C3AED', bg: '#EDE9FE' },
 };
 
-const ALL_TYPES: LibraryContentType[] = ['linkedin', 'kakao', 'email', 'card', 'cardnews'];
+const ALL_TYPES: LibraryContentType[] = ['linkedin', 'kakao', 'email', 'sms', 'card', 'cardnews'];
 
 export default function LibraryPage() {
   const [items, setItems] = useState<LibraryItem[]>([]);

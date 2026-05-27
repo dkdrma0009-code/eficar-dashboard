@@ -19,13 +19,14 @@ import type { CardItem } from '@/app/cardnews/types';
 
 const SAVINGS_RATE = 0.30;
 
-type ContentType = 'linkedin' | 'kakao' | 'email' | 'card';
+type ContentType = 'linkedin' | 'kakao' | 'email' | 'card' | 'sms';
 
 const CONTENT_TYPES: { key: ContentType; label: string; emoji: string }[] = [
-  { key: 'linkedin', label: 'LinkedIn 포스트',     emoji: '💼' },
-  { key: 'kakao',    label: '카카오톡 영업 메시지', emoji: '💬' },
-  { key: 'email',    label: '이메일 제안서',         emoji: '📧' },
-  { key: 'card',     label: '성과 카드 문구',        emoji: '📊' },
+  { key: 'linkedin', label: 'LinkedIn 포스트',      emoji: '💼' },
+  { key: 'kakao',    label: '카카오톡 영업 메시지',  emoji: '💬' },
+  { key: 'email',    label: '이메일 제안서',          emoji: '📧' },
+  { key: 'sms',      label: 'SMS / LMS / MMS',      emoji: '📨' },
+  { key: 'card',     label: '성과 카드 문구',         emoji: '📊' },
 ];
 
 const EMPHASIS: { key: string; label: string }[] = [
@@ -204,6 +205,29 @@ info@eficar.co.kr / 010-2752-1054`;
     return [v0, v0b][version % 2];
   }
 
+  if (type === 'sms') {
+    // SMS: 90자 이하 단문 / LMS: 90자 초과 장문
+    const v0 =
+`[에픽카] ${d.customer} ${d.todayLabel} 성과 공유
+
+${d.growthStr ? `전월 대비 ${d.growthStr} 성장 📈` : `누적 공급액 ${d.totalSales}`}
+주력 품목: ${d.topItem}
+OEM 대비 절감: ${d.savingsStr}
+
+문의 010-2752-1054`;
+
+    const v1 =
+`[에픽카] 안녕하세요.
+${d.customer} ${d.todayLabel} 실적을 전달드립니다.
+
+${blocks.slice(0, 3).map(b => b.replace(/^[^ ]+ /, '')).join('\n')}
+
+자세한 내용은 연락 주세요.
+에픽카 마케팅팀 010-2752-1054`;
+
+    return [v0, v1][version % 2];
+  }
+
   // card
   const v0 =
 `[${d.todayLabel} ${d.customer} 성과 카드]
@@ -333,7 +357,7 @@ export default function ContentPage() {
     });
   };
 
-  const logToCampaign = (channel: 'linkedin' | 'kakao' | 'email') => {
+  const logToCampaign = (channel: 'linkedin' | 'kakao' | 'email' | 'etc') => {
     const today = new Date().toISOString().slice(0, 10);
     const label = CONTENT_TYPES.find(c => c.key === contentType)?.label ?? '';
     addCampaign({
@@ -509,8 +533,8 @@ export default function ContentPage() {
         setSmsFeedback(`❌ ${data.error}`);
       } else {
         setSmsFeedback(`✅ 문자 발송 완료 (${data.msgType})`);
-        logToCalendar('kakao');
-        logToCampaign('kakao');
+        if (contentType !== 'sms') logToCalendar('kakao');
+        logToCampaign('etc');
         addSendLog({
           channel: (data.msgType as string).toLowerCase() as 'sms' | 'lms' | 'mms',
           customer: contentData?.customer ?? '',
@@ -1100,7 +1124,82 @@ export default function ContentPage() {
                     </div>
                   )}
 
-                  {/* 팝빌 직접 발송 (SMS / 카카오 친구톡) */}
+                  {/* SMS / LMS / MMS 전용 발송 패널 */}
+                  {contentType === 'sms' && activeText && (
+                    <div style={{ marginBottom: 12, padding: '14px 16px', background: '#F8F9FA', borderRadius: 10, border: '1px solid #E2E8F0' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                        <p style={{ fontSize: 12, fontWeight: 700, color: '#191F28' }}>📨 직접 발송</p>
+                        {/* 글자수 / 메시지 타입 배지 */}
+                        {(() => {
+                          const len = activeText.length;
+                          const type = mmsMode ? 'MMS' : len <= 90 ? 'SMS' : 'LMS';
+                          const color = type === 'SMS' ? '#005957' : type === 'LMS' ? '#0A66C2' : '#7C3AED';
+                          const bg    = type === 'SMS' ? '#E6F2F2'  : type === 'LMS' ? '#EFF6FF'  : '#EDE9FE';
+                          return (
+                            <span style={{ fontSize: 11, fontWeight: 700, color, background: bg, padding: '3px 10px', borderRadius: 12 }}>
+                              {type} · {len}자{type === 'SMS' && ` / 90자`}
+                            </span>
+                          );
+                        })()}
+                      </div>
+
+                      {/* 전화번호 입력 */}
+                      <input
+                        value={smsPhone}
+                        onChange={e => setSmsPhone(e.target.value)}
+                        placeholder="수신번호 01012345678"
+                        style={{ width: '100%', padding: '8px 12px', border: '1px solid #E2E8F0', borderRadius: 8, fontSize: 13, fontFamily: 'inherit', marginBottom: 10 }}
+                      />
+
+                      {/* MMS 이미지 영역 (항상 노출) */}
+                      <div style={{ marginBottom: 10, padding: '10px 12px', background: '#F0FDF9', borderRadius: 8, border: '1px solid #A7F3D0' }}>
+                        <p style={{ fontSize: 11, fontWeight: 700, color: '#005957', marginBottom: 8 }}>🖼️ MMS 이미지 (선택)</p>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                          <button
+                            onClick={generateMmsImage}
+                            disabled={mmsImageGenerating || !contentData}
+                            style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 14px', borderRadius: 7, border: '1px solid #005957', cursor: mmsImageGenerating ? 'not-allowed' : 'pointer', fontSize: 12, fontWeight: 600, color: '#005957', background: 'white', opacity: mmsImageGenerating ? 0.6 : 1 }}
+                          >
+                            {mmsImageGenerating ? '⏳ 생성 중...' : '🎨 성과 카드 자동 생성'}
+                          </button>
+                          <label style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 12px', borderRadius: 7, border: '1px dashed #8B95A1', cursor: 'pointer', fontSize: 12, fontWeight: 600, color: '#8B95A1', background: 'white' }}>
+                            📁 직접 첨부
+                            <input type="file" accept="image/*" onChange={e => {
+                              const file = e.target.files?.[0];
+                              if (!file) return;
+                              const reader = new FileReader();
+                              reader.onload = () => {
+                                const result = reader.result as string;
+                                setMmsImage({ base64: result.split(',')[1], mime: file.type });
+                                setMmsMode(true);
+                              };
+                              reader.readAsDataURL(file);
+                            }} style={{ display: 'none' }} />
+                          </label>
+                          {mmsImage ? (
+                            <span style={{ fontSize: 12, color: '#005957', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
+                              ✅ 이미지 준비됨
+                              <button onClick={() => { setMmsImage(null); setMmsMode(false); }} style={{ color: '#8B95A1', background: 'none', border: 'none', cursor: 'pointer', fontSize: 14, lineHeight: 1, padding: 0 }}>×</button>
+                            </span>
+                          ) : (
+                            <span style={{ fontSize: 11, color: '#8B95A1' }}>이미지 없으면 SMS / LMS로 발송</span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* 발송 버튼 */}
+                      <button
+                        onClick={sendSMS}
+                        disabled={smsSending || !smsPhone || (mmsMode && !mmsImage)}
+                        style={{ width: '100%', padding: '10px', borderRadius: 8, border: 'none', cursor: (smsSending || !smsPhone || (mmsMode && !mmsImage)) ? 'not-allowed' : 'pointer', fontSize: 14, fontWeight: 700, background: (smsSending || !smsPhone || (mmsMode && !mmsImage)) ? '#E2E8F0' : '#191F28', color: (smsSending || !smsPhone || (mmsMode && !mmsImage)) ? '#8B95A1' : 'white' }}
+                      >
+                        {smsSending ? '발송 중...' : mmsMode && mmsImage ? '🖼️ MMS 발송' : activeText.length > 90 ? '📄 LMS 발송' : '📨 SMS 발송'}
+                      </button>
+                      {smsFeedback && <p style={{ fontSize: 12, fontWeight: 600, color: smsFeedback.startsWith('✅') ? '#00B386' : '#EF4444', marginTop: 8 }}>{smsFeedback}</p>}
+                    </div>
+                  )}
+
+                  {/* 팝빌 직접 발송 (카카오 친구톡 + SMS 보조) */}
                   {(contentType === 'kakao' || contentType === 'email') && activeText && (
                     <div style={{ marginBottom: 12 }}>
                       <p style={{ fontSize: 11, fontWeight: 700, color: '#8B95A1', marginBottom: 6 }}>📱 직접 발송</p>
@@ -1120,58 +1219,14 @@ export default function ContentPage() {
                             {kakaoSending ? '발송 중...' : '💬 친구톡 발송'}
                           </button>
                         )}
-                        {/* MMS 토글 */}
-                        <label style={{ display: 'flex', alignItems: 'center', gap: 5, cursor: 'pointer', fontSize: 12, fontWeight: 600, color: mmsMode ? '#005957' : '#8B95A1', userSelect: 'none' }}>
-                          <input type="checkbox" checked={mmsMode} onChange={e => { setMmsMode(e.target.checked); if (!e.target.checked) setMmsImage(null); }} style={{ accentColor: '#005957', width: 14, height: 14 }} />
-                          MMS (이미지 첨부)
-                        </label>
                         <button
                           onClick={sendSMS}
-                          disabled={smsSending || !smsPhone || (mmsMode && !mmsImage)}
-                          style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 7, border: '1px solid #E2E8F0', cursor: (smsSending || !smsPhone || (mmsMode && !mmsImage)) ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 700, background: 'white', color: '#191F28', opacity: (smsSending || !smsPhone || (mmsMode && !mmsImage)) ? 0.5 : 1 }}
+                          disabled={smsSending || !smsPhone}
+                          style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 7, border: '1px solid #E2E8F0', cursor: (smsSending || !smsPhone) ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 700, background: 'white', color: '#191F28', opacity: (smsSending || !smsPhone) ? 0.5 : 1 }}
                         >
-                          {smsSending ? '발송 중...' : mmsMode ? '🖼️ MMS 발송' : '📨 문자 발송'}
+                          {smsSending ? '발송 중...' : '📨 문자 발송'}
                         </button>
                       </div>
-
-                      {/* MMS 이미지 첨부 영역 */}
-                      {mmsMode && (
-                        <div style={{ marginBottom: 10, padding: '10px 12px', background: '#F0FDF9', borderRadius: 8, border: '1px solid #A7F3D0' }}>
-                          <p style={{ fontSize: 11, fontWeight: 700, color: '#005957', marginBottom: 8 }}>MMS 이미지</p>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                            <button
-                              onClick={generateMmsImage}
-                              disabled={mmsImageGenerating || !contentData}
-                              style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 12px', borderRadius: 7, border: '1px solid #005957', cursor: mmsImageGenerating ? 'not-allowed' : 'pointer', fontSize: 12, fontWeight: 600, color: '#005957', background: 'white', opacity: mmsImageGenerating ? 0.6 : 1 }}
-                            >
-                              {mmsImageGenerating ? '⏳ 생성 중...' : '🎨 카드 자동 생성'}
-                            </button>
-                            <label style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 12px', borderRadius: 7, border: '1px dashed #8B95A1', cursor: 'pointer', fontSize: 12, fontWeight: 600, color: '#8B95A1', background: 'white' }}>
-                              🖼️ 직접 첨부
-                              <input type="file" accept="image/*" onChange={e => {
-                                const file = e.target.files?.[0];
-                                if (!file) return;
-                                const reader = new FileReader();
-                                reader.onload = () => {
-                                  const result = reader.result as string;
-                                  setMmsImage({ base64: result.split(',')[1], mime: file.type });
-                                };
-                                reader.readAsDataURL(file);
-                              }} style={{ display: 'none' }} />
-                            </label>
-                            {mmsImage && (
-                              <span style={{ fontSize: 12, color: '#005957', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
-                                ✅ 이미지 준비됨
-                                <button onClick={() => setMmsImage(null)} style={{ color: '#8B95A1', background: 'none', border: 'none', cursor: 'pointer', fontSize: 14, lineHeight: 1, padding: 0 }}>×</button>
-                              </span>
-                            )}
-                          </div>
-                          {mmsMode && !mmsImage && (
-                            <p style={{ fontSize: 11, color: '#B45309', marginTop: 6 }}>이미지를 첨부해야 MMS 발송이 가능합니다</p>
-                          )}
-                        </div>
-                      )}
-
                       {kakaoFeedback && <p style={{ fontSize: 12, fontWeight: 600, color: kakaoFeedback.startsWith('✅') ? '#00B386' : '#EF4444', marginBottom: 4 }}>{kakaoFeedback}</p>}
                       {smsFeedback && <p style={{ fontSize: 12, fontWeight: 600, color: smsFeedback.startsWith('✅') ? '#00B386' : '#EF4444' }}>{smsFeedback}</p>}
                     </div>

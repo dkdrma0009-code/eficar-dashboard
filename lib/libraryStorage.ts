@@ -2,7 +2,7 @@ import { syncUpsert, syncDelete } from './syncManager';
 
 const KEY = 'eficar-library';
 
-export type LibraryContentType = 'linkedin' | 'kakao' | 'email' | 'card' | 'cardnews';
+export type LibraryContentType = 'linkedin' | 'kakao' | 'email' | 'card' | 'cardnews' | 'sms';
 
 export interface LibraryItem {
   id: string;

@@ -84,11 +84,13 @@ export default function CampaignsPage() {
   );
 
   function parseNote(note: string) {
-    return {
+    const raw = {
       total:   Number(note.match(/발송\s*(\d+)건/)?.[1]  ?? 0),
       success: Number(note.match(/성공\s*(\d+)건/)?.[1]  ?? 0),
       fail:    Number(note.match(/실패\s*(\d+)건/)?.[1]  ?? 0),
     };
+    // 발송 총수가 성공+실패보다 작으면 성공+실패를 기준으로 사용
+    return { ...raw, total: Math.max(raw.total, raw.success + raw.fail) };
   }
 
   const totalStats = useMemo(() => {
@@ -98,7 +100,7 @@ export default function CampaignsPage() {
       if (n.total > 0) { sent += n.total; success += n.success; fail += n.fail; }
       else sent += 1;
     });
-    return { sent, success, fail, rate: sent > 0 ? Math.round((success / sent) * 100) : 0 };
+    return { sent, success, fail, rate: sent > 0 ? Math.min(100, Math.round((success / sent) * 100)) : 0 };
   }, [records]);
 
   const grouped = useMemo(() => {
@@ -216,9 +218,10 @@ export default function CampaignsPage() {
           const rawDate = row[3];
           const senderId = String(row[5] ?? '');
           const content  = String(row[9] ?? '');
-          const total    = Number(row[10]) || 1;
           const success  = Number(row[12]) || 0;
           const fail     = Number(row[14]) || 0;
+          // total이 0이면 success+fail을 기준으로 사용, 둘 다 0이면 1
+          const total    = Math.max(Number(row[10]) || 0, success + fail) || 1;
 
           let date = '';
           if (rawDate instanceof Date) {
