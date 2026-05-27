@@ -881,8 +881,9 @@ export default function ContentPage() {
   const msgBodyText = activeText.replace(/^제목:.*\n\n?/, '').trim();
   const msgSubjectText = msgSubject || (contentData?.customer ? `에픽카 × ${contentData.customer}` : '에픽카 소식');
 
+  const isMms = contentType === 'mms';
   const SmsSendPanel = (
-    <div style={{ display: 'grid', gridTemplateColumns: '1fr 188px', gap: 14, alignItems: 'start' }}>
+    <div style={{ display: 'grid', gridTemplateColumns: isMms ? '1fr' : '1fr 188px', gap: 14, alignItems: 'start' }}>
       {/* 좌측: 입력 폼 */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
 
@@ -970,8 +971,8 @@ export default function ContentPage() {
         </div>
       </div>
 
-      {/* 우측: 휴대폰 미리보기 */}
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+      {/* 우측: 휴대폰 미리보기 (SMS/LMS 전용) */}
+      {!isMms && <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
         <p style={{ fontSize: 10, fontWeight: 700, color: '#8B95A1', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 1 }}>미리보기</p>
         <div style={{ width: 178, background: '#1C1C1E', borderRadius: 28, padding: '14px 8px', boxShadow: '0 8px 24px rgba(0,0,0,0.3)' }}>
           {/* 상단 노치 */}
@@ -991,10 +992,7 @@ export default function ContentPage() {
             {/* 말풍선 */}
             <div style={{ flex: 1 }}>
               <div style={{ background: '#E9E9EB', borderRadius: '14px 14px 14px 4px', padding: '7px 9px', maxWidth: '90%', marginLeft: 4 }}>
-                {contentType === 'mms' && mmsImage && (
-                  <img src={`data:${mmsImage.mime};base64,${mmsImage.base64}`} alt="" style={{ width: '100%', borderRadius: 8, marginBottom: 4 }} />
-                )}
-                {(contentType === 'lms' || contentType === 'mms') && msgSubject && (
+                {contentType === 'lms' && msgSubject && (
                   <p style={{ fontSize: 8, fontWeight: 800, color: '#191F28', marginBottom: 3, borderBottom: '1px solid #D1D1D6', paddingBottom: 3 }}>{msgSubjectText}</p>
                 )}
                 <p style={{ fontSize: 8, color: '#191F28', lineHeight: 1.5, whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
@@ -1010,7 +1008,7 @@ export default function ContentPage() {
             <div style={{ width: 50, height: 4, background: '#3A3A3C', borderRadius: 2 }} />
           </div>
         </div>
-      </div>
+      </div>}
     </div>
   );
 
@@ -1448,14 +1446,17 @@ export default function ContentPage() {
                         style={{ width: '100%', padding: '8px 12px', border: '1px solid #E2E8F0', borderRadius: 8, fontSize: 13, fontFamily: 'inherit', marginBottom: 8 }} />
 
                       {/* 이미지 섹션 */}
-                      <div style={{ marginBottom: 10, padding: '10px 12px', background: '#F0FDF9', borderRadius: 8, border: '1px solid #A7F3D0' }}>
-                        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: mmsImage ? 10 : 0 }}>
-                          <button onClick={generateMmsImage} disabled={mmsImageGenerating || !contentData}
-                            style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 14px', borderRadius: 7, border: '1px solid #005957', cursor: mmsImageGenerating ? 'not-allowed' : 'pointer', fontSize: 12, fontWeight: 600, color: '#005957', background: 'white', opacity: mmsImageGenerating ? 0.6 : 1 }}>
-                            {mmsImageGenerating ? '⏳ 생성 중...' : '🎨 성과 카드 자동 생성'}
-                          </button>
-                          <label style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 12px', borderRadius: 7, border: '1px dashed #8B95A1', cursor: 'pointer', fontSize: 12, fontWeight: 600, color: '#8B95A1', background: 'white' }}>
-                            📁 파일 첨부
+                      <div style={{ marginBottom: 10, padding: '12px 14px', background: '#F8F9FA', borderRadius: 8, border: '1px solid #E2E8F0' }}>
+                        <p style={{ fontSize: 11, fontWeight: 700, color: '#8B95A1', marginBottom: 8 }}>이미지 선택</p>
+                        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 10 }}>
+                          {/* 안내문 생성기에서 가져오기 — 1순위 */}
+                          <a href="/flyer" target="_blank" rel="noopener noreferrer"
+                            style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '7px 14px', borderRadius: 7, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 700, color: 'white', background: '#005957', textDecoration: 'none' }}>
+                            📄 안내문 생성기에서 만들기
+                          </a>
+                          {/* 파일 직접 첨부 */}
+                          <label style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '7px 12px', borderRadius: 7, border: '1px solid #005957', cursor: 'pointer', fontSize: 12, fontWeight: 600, color: '#005957', background: 'white' }}>
+                            📁 이미지 파일 첨부
                             <input type="file" accept="image/*" onChange={e => {
                               const file = e.target.files?.[0]; if (!file) return;
                               const reader = new FileReader();
@@ -1463,16 +1464,27 @@ export default function ContentPage() {
                               reader.readAsDataURL(file);
                             }} style={{ display: 'none' }} />
                           </label>
+                          {/* 성과 카드 자동 생성 */}
+                          <button onClick={generateMmsImage} disabled={mmsImageGenerating || !contentData}
+                            style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '7px 12px', borderRadius: 7, border: '1px dashed #8B95A1', cursor: mmsImageGenerating ? 'not-allowed' : 'pointer', fontSize: 12, fontWeight: 600, color: '#8B95A1', background: 'white', opacity: mmsImageGenerating ? 0.6 : 1 }}>
+                            {mmsImageGenerating ? '⏳ 생성 중...' : '🎨 성과 카드 자동 생성'}
+                          </button>
                           {mmsImage && (
-                            <button onClick={() => setMmsImage(null)} style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid #FCA5A5', background: 'white', color: '#DC2626', fontSize: 11, cursor: 'pointer' }}>삭제</button>
+                            <button onClick={() => setMmsImage(null)} style={{ padding: '5px 10px', borderRadius: 6, border: '1px solid #FCA5A5', background: 'white', color: '#DC2626', fontSize: 11, cursor: 'pointer' }}>삭제</button>
                           )}
                         </div>
+                        {!mmsImage && (
+                          <p style={{ fontSize: 11, color: '#8B95A1', lineHeight: 1.6 }}>
+                            💡 <strong>안내문 생성기</strong>에서 GS25 이벤트·휠 매입·파트너 모집 안내문을 만든 뒤<br />
+                            JPG 다운로드 → '이미지 파일 첨부'로 등록하세요
+                          </p>
+                        )}
                         {/* ★ 이미지 미리보기 */}
                         {mmsImage && (
                           <img
                             src={`data:${mmsImage.mime};base64,${mmsImage.base64}`}
                             alt="MMS 이미지 미리보기"
-                            style={{ width: '100%', maxWidth: 340, borderRadius: 8, display: 'block', border: '1px solid #E2E8F0' }}
+                            style={{ width: '100%', maxWidth: 380, borderRadius: 8, display: 'block', border: '1px solid #E2E8F0' }}
                           />
                         )}
                       </div>
