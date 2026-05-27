@@ -1147,9 +1147,10 @@ export default function ContentPage() {
                   : <><Sparkles style={{ width: 16, height: 16, marginRight: 6, verticalAlign: 'middle' }} />AI로 생성하기</>}
               </button>
             ) : (
-              <button onClick={() => { setVersion(0); router.push('/cardnews'); }} className="btn-primary"
+              <button onClick={() => setVersion(v => v + 1)} className="btn-primary"
                 style={{ width: '100%', justifyContent: 'center', fontSize: 15, height: 48 }}>
-                ✨ 콘텐츠 생성하기
+                <RefreshCw style={{ width: 16, height: 16, marginRight: 6, verticalAlign: 'middle' }} />
+                {version === 0 ? '✨ 콘텐츠 생성하기' : '🔄 다른 버전 생성'}
               </button>
             )}
           </div>
