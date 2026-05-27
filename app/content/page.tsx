@@ -792,6 +792,11 @@ export default function ContentPage() {
     showFeedback('💼 LinkedIn 게시 창이 열렸습니다. 캘린더 · 캠페인에 자동 기록됐습니다.');
   };
 
+  const registerEmailTrackLog = () => {
+    addSendLog({ id: emailTrackId, channel: 'email', customer: contentData?.customer ?? '', receiver_masked: recipientEmail || '미입력', content_preview: activeText.slice(0, 40) });
+    setEmailTrackId(generateLogId());
+  };
+
   const sendGmail = () => {
     const subject = contentType === 'email' ? parseEmailSubject(activeText) : `[에픽카] ${contentData?.customer ?? ''} 파트너십 안내`;
     const body    = contentType === 'email' ? parseEmailBody(activeText) : activeText;
@@ -799,6 +804,7 @@ export default function ContentPage() {
     window.open(`https://mail.google.com/mail/?view=cm&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}${to}`, '_blank');
     logToCalendar('email');
     logToCampaign('email');
+    if (emailTrackEnabled) registerEmailTrackLog();
     showFeedback('📧 Gmail 작성 창이 열렸습니다. 캘린더 · 캠페인에 자동 기록됐습니다.');
   };
 
@@ -808,6 +814,7 @@ export default function ContentPage() {
     window.location.href = `mailto:${recipientEmail}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
     logToCalendar('email');
     logToCampaign('email');
+    if (emailTrackEnabled) registerEmailTrackLog();
     showFeedback('📧 메일 앱이 열렸습니다. 캘린더 · 캠페인에 자동 기록됐습니다.');
   };
 
@@ -1321,8 +1328,14 @@ export default function ContentPage() {
                         <span style={{ fontSize: 12, fontWeight: 600, color: emailTrackEnabled ? '#005957' : '#8B95A1' }}>열람 추적 픽셀 포함</span>
                       </label>
                       {emailTrackEnabled && (
-                        <div style={{ marginTop: 6, padding: '8px 10px', background: '#F0FDF9', borderRadius: 7, border: '1px solid #A7F3D0' }}>
-                          <p style={{ fontSize: 11, color: '#005957', fontWeight: 600, marginBottom: 4 }}>이메일 본문 하단에 추가할 HTML</p>
+                        <div style={{ marginTop: 6, padding: '10px 12px', background: '#F0FDF9', borderRadius: 7, border: '1px solid #A7F3D0' }}>
+                          <p style={{ fontSize: 11, color: '#005957', fontWeight: 700, marginBottom: 6 }}>
+                            📡 열람 추적 활성화됨
+                          </p>
+                          <p style={{ fontSize: 11, color: '#374151', marginBottom: 8, lineHeight: 1.6 }}>
+                            Gmail/메일앱 버튼을 클릭하면 자동으로 추적 등록됩니다.<br />
+                            HTML 이메일에 픽셀을 직접 삽입하려면 아래 코드를 복사하세요.
+                          </p>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                             <code style={{ fontSize: 10, color: '#374151', background: 'white', padding: '4px 6px', borderRadius: 4, border: '1px solid #E5E7EB', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                               {`<img src="${buildTrackingPixelUrl(emailTrackId)}" width="1" height="1" />`}
@@ -1330,11 +1343,11 @@ export default function ContentPage() {
                             <button
                               onClick={() => {
                                 navigator.clipboard.writeText(`<img src="${buildTrackingPixelUrl(emailTrackId)}" width="1" height="1" style="display:none" />`);
-                                addSendLog({ id: emailTrackId, channel: 'email', customer: contentData?.customer ?? '', receiver_masked: recipientEmail || '미입력', content_preview: activeText.slice(0, 40) });
+                                registerEmailTrackLog();
                               }}
                               style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid #005957', background: 'white', color: '#005957', fontSize: 11, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}
                             >
-                              복사
+                              복사 + 추적 등록
                             </button>
                           </div>
                         </div>

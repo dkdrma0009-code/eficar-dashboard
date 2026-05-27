@@ -1,8 +1,9 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-import { Search, Trash2, Copy, Check, BookOpen, Filter } from 'lucide-react';
+import { Search, Trash2, Copy, Check, BookOpen, Filter, Download } from 'lucide-react';
 import { getLibrary, deleteLibraryItem, type LibraryItem, type LibraryContentType } from '@/lib/libraryStorage';
+import { downloadExcel } from '@/lib/exportExcel';
 
 const TYPE_META: Record<LibraryContentType, { label: string; emoji: string; color: string; bg: string }> = {
   linkedin: { label: 'LinkedIn',   emoji: '💼', color: '#0A66C2', bg: '#EFF6FF' },
@@ -56,11 +57,24 @@ export default function LibraryPage() {
       <div style={{ maxWidth: 1400, margin: '0 auto', padding: '24px' }}>
 
         {/* 헤더 */}
-        <div style={{ marginBottom: 24 }}>
-          <h1 style={{ fontSize: 24, fontWeight: 800, color: '#191F28' }}>콘텐츠 라이브러리</h1>
-          <p style={{ fontSize: 14, color: '#8B95A1', marginTop: 6 }}>
-            생성한 콘텐츠를 저장하고 재사용하세요 · 총 {items.length}개
-          </p>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 24 }}>
+          <div>
+            <h1 style={{ fontSize: 24, fontWeight: 800, color: '#191F28' }}>콘텐츠 라이브러리</h1>
+            <p style={{ fontSize: 14, color: '#8B95A1', marginTop: 6 }}>
+              생성한 콘텐츠를 저장하고 재사용하세요 · 총 {items.length}개
+            </p>
+          </div>
+          {filtered.length > 0 && (
+            <button
+              onClick={() => downloadExcel(
+                filtered.map(i => ({ '제목': i.title, '유형': TYPE_META[i.type]?.label ?? i.type, '고객사': i.customer, '내용': i.content, '저장일': i.createdAt?.slice(0, 10) ?? '' })),
+                `라이브러리_${new Date().toISOString().slice(0, 10)}.xlsx`,
+              )}
+              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 8, border: '1px solid #E2E8F0', background: 'white', color: '#4A5568', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
+            >
+              <Download style={{ width: 14, height: 14 }} /> 엑셀 내보내기
+            </button>
+          )}
         </div>
 
         {/* 검색 + 필터 */}

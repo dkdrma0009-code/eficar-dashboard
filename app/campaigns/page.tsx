@@ -2,8 +2,10 @@
 
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { Plus, X, Check, Send, Upload, AlertCircle, Bell, Mail, Clock, Brain, TrendingUp, TrendingDown } from 'lucide-react';
+import { Plus, X, Check, Send, Upload, AlertCircle, Bell, Mail, Clock, Brain, TrendingUp, TrendingDown, Download } from 'lucide-react';
 import * as XLSX from 'xlsx';
+import { downloadExcel } from '@/lib/exportExcel';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, Legend } from 'recharts';
 import { getCampaigns, addCampaign, updateCampaign, deleteCampaign, isDuplicateCampaign, type CampaignRecord, type CampaignChannel, type CampaignOutcome } from '@/lib/campaignStorage';
 import { getSendLogs, type SendLog } from '@/lib/sendLogStorage';
 import { useDashboardData } from '@/lib/DataContext';
@@ -69,7 +71,7 @@ export default function CampaignsPage() {
     if (c) { setForm(prev => ({ ...prev, customer: c })); setShowForm(true); }
   }, []);
 
-  const [viewMode, setViewMode] = useState<'grouped' | 'list' | 'sendlogs'>('grouped');
+  const [viewMode, setViewMode] = useState<'grouped' | 'list' | 'sendlogs' | 'charts'>('grouped');
   const [expandedGroup, setExpandedGroup] = useState<string | null>(null);
   const [filterCustomer, setFilterCustomer] = useState<string>('all');
   const [sendLogs, setSendLogs] = useState<SendLog[]>([]);
@@ -161,6 +163,35 @@ export default function CampaignsPage() {
     records.filter(r => r.scheduledDate === today),
     [records, today]
   );
+
+  const monthlyChartData = useMemo(() => {
+    const map = new Map<string, { month: string; 발송: number; 성공: number }>();
+    records.forEach(r => {
+      const month = r.date.slice(0, 7);
+      const n = parseNote(r.note);
+      if (!map.has(month)) map.set(month, { month, 발송: 0, 성공: 0 });
+      const m = map.get(month)!;
+      m.발송 += n.total > 0 ? n.total : 1;
+      m.성공 += n.success;
+    });
+    return Array.from(map.values()).sort((a, b) => a.month.localeCompare(b.month)).slice(-6);
+  }, [records]);
+
+  const channelChartData = useMemo(() => {
+    return CHANNELS.map(ch => {
+      const recs = records.filter(r => r.channel === ch.value);
+      const conv = recs.filter(r => r.outcome === 'meeting' || r.outcome === 'proposal' || r.outcome === 'closed').length;
+      return { name: ch.label, 전환율: recs.length > 0 ? Math.round(conv / recs.length * 100) : 0, 캠페인수: recs.length };
+    }).filter(d => d.캠페인수 > 0);
+  }, [records]);
+
+  const outcomeChartData = useMemo(() => {
+    return OUTCOMES.map(o => ({
+      name: o.label,
+      value: records.filter(r => r.outcome === o.value).length,
+      color: o.color,
+    })).filter(d => d.value > 0);
+  }, [records]);
 
   function sendBrowserNotification() {
     if (!('Notification' in window)) { alert('이 브라우저는 알림을 지원하지 않습니다.'); return; }
@@ -328,6 +359,24 @@ export default function CampaignsPage() {
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
             <input ref={fileRef} type="file" accept=".xlsx,.xls" style={{ display: 'none' }} onChange={handleFileChange} />
+            {records.length > 0 && (
+              <button
+                onClick={() => {
+                  const rows = records.map(r => ({
+                    '날짜': r.date,
+                    '고객사': r.customer,
+                    '채널': CHANNELS.find(c => c.value === r.channel)?.label ?? r.channel,
+                    '콘텐츠 요약': r.contentSummary,
+                    '성과': OUTCOMES.find(o => o.value === r.outcome)?.label ?? r.outcome,
+                    '메모': r.note,
+                    '예약 발송일': r.scheduledDate ?? '',
+                  }));
+                  downloadExcel(rows, `캠페인_${new Date().toISOString().slice(0, 10)}.xlsx`);
+                }}
+                style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 8, border: '1px solid #E2E8F0', background: 'white', color: '#4A5568', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+                <Download style={{ width: 14, height: 14 }} /> 엑셀 내보내기
+              </button>
+            )}
             <button onClick={() => fileRef.current?.click()}
               style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 8, border: '1px solid #E2E8F0', background: 'white', color: '#4A5568', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
               <Upload style={{ width: 14, height: 14 }} /> 팝빌 가져오기
@@ -458,12 +507,12 @@ export default function CampaignsPage() {
             </button>
           ))}
           <div style={{ marginLeft: 'auto', display: 'flex', gap: 4, background: '#F2F4F6', borderRadius: 8, padding: 3 }}>
-            {(['grouped', 'list', 'sendlogs'] as const).map(v => (
+            {(['grouped', 'list', 'sendlogs', 'charts'] as const).map(v => (
               <button key={v} onClick={() => setViewMode(v)}
                 style={{ padding: '4px 12px', borderRadius: 6, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600,
                   background: viewMode === v ? 'white' : 'transparent', color: viewMode === v ? '#191F28' : '#8B95A1',
                   boxShadow: viewMode === v ? '0 1px 3px rgba(0,0,0,0.08)' : 'none' }}>
-                {v === 'grouped' ? '그룹' : v === 'list' ? '전체' : '📡 발송 로그'}
+                {v === 'grouped' ? '그룹' : v === 'list' ? '전체' : v === 'sendlogs' ? '📡 발송 로그' : '📊 차트'}
               </button>
             ))}
           </div>
@@ -642,6 +691,109 @@ export default function CampaignsPage() {
                   );
                 })}
               </div>
+            )}
+          </div>
+        )}
+
+        {/* 차트 뷰 */}
+        {viewMode === 'charts' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            {records.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '80px 0', color: '#8B95A1', fontSize: 14 }}>
+                캠페인 데이터가 없습니다. 팝빌 가져오기로 데이터를 추가해보세요.
+              </div>
+            ) : (
+              <>
+                {/* 월별 발송 추이 */}
+                {monthlyChartData.length > 0 && (
+                  <div style={{ background: 'white', border: '1px solid #F2F4F6', borderRadius: 12, padding: '20px 24px' }}>
+                    <p style={{ fontSize: 13, fontWeight: 700, color: '#191F28', marginBottom: 16 }}>월별 발송 추이</p>
+                    <ResponsiveContainer width="100%" height={220}>
+                      <BarChart data={monthlyChartData} barGap={4} margin={{ top: 4, right: 8, left: -16, bottom: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#F2F4F6" vertical={false} />
+                        <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#8B95A1' }} tickLine={false} axisLine={false}
+                          tickFormatter={v => v.slice(5) + '월'} />
+                        <YAxis tick={{ fontSize: 11, fill: '#8B95A1' }} tickLine={false} axisLine={false} />
+                        <Tooltip
+                          contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #F2F4F6', boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
+                          formatter={(val: number, name: string) => [`${val.toLocaleString()}건`, name]}
+                        />
+                        <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 12 }} />
+                        <Bar dataKey="발송" fill="#CBD5E1" radius={[4, 4, 0, 0]} />
+                        <Bar dataKey="성공" fill="#005957" radius={[4, 4, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+                  {/* 채널별 전환율 */}
+                  {channelChartData.length > 0 && (
+                    <div style={{ background: 'white', border: '1px solid #F2F4F6', borderRadius: 12, padding: '20px 24px' }}>
+                      <p style={{ fontSize: 13, fontWeight: 700, color: '#191F28', marginBottom: 16 }}>채널별 전환율 (%)</p>
+                      <ResponsiveContainer width="100%" height={200}>
+                        <BarChart data={channelChartData} layout="vertical" margin={{ top: 0, right: 16, left: 8, bottom: 0 }}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#F2F4F6" horizontal={false} />
+                          <XAxis type="number" domain={[0, 100]} tick={{ fontSize: 11, fill: '#8B95A1' }} tickLine={false} axisLine={false}
+                            tickFormatter={v => `${v}%`} />
+                          <YAxis dataKey="name" type="category" tick={{ fontSize: 12, fill: '#4A5568' }} tickLine={false} axisLine={false} width={56} />
+                          <Tooltip
+                            contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #F2F4F6' }}
+                            formatter={(val: number, _: string, entry: { payload?: { 캠페인수?: number } }) => [`${val}% (${entry.payload?.캠페인수 ?? 0}건)`, '전환율']}
+                          />
+                          <Bar dataKey="전환율" radius={[0, 4, 4, 0]}>
+                            {channelChartData.map((_, i) => (
+                              <Cell key={i} fill={['#005957', '#0A66C2', '#6366F1', '#F59E0B', '#8B95A1'][i % 5]} />
+                            ))}
+                          </Bar>
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  )}
+
+                  {/* 성과 단계별 현황 */}
+                  {outcomeChartData.length > 0 && (
+                    <div style={{ background: 'white', border: '1px solid #F2F4F6', borderRadius: 12, padding: '20px 24px' }}>
+                      <p style={{ fontSize: 13, fontWeight: 700, color: '#191F28', marginBottom: 16 }}>성과 단계별 현황</p>
+                      <ResponsiveContainer width="100%" height={200}>
+                        <BarChart data={outcomeChartData} margin={{ top: 0, right: 8, left: -16, bottom: 0 }}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#F2F4F6" vertical={false} />
+                          <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#8B95A1' }} tickLine={false} axisLine={false} />
+                          <YAxis tick={{ fontSize: 11, fill: '#8B95A1' }} tickLine={false} axisLine={false} allowDecimals={false} />
+                          <Tooltip
+                            contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #F2F4F6' }}
+                            formatter={(val: number) => [`${val}건`, '캠페인']}
+                          />
+                          <Bar dataKey="value" radius={[4, 4, 0, 0]}>
+                            {outcomeChartData.map((d, i) => (
+                              <Cell key={i} fill={d.color} />
+                            ))}
+                          </Bar>
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  )}
+                </div>
+
+                {/* 발송 로그 열람/클릭 */}
+                {sendLogs.length > 0 && (
+                  <div style={{ background: 'white', border: '1px solid #F2F4F6', borderRadius: 12, padding: '20px 24px' }}>
+                    <p style={{ fontSize: 13, fontWeight: 700, color: '#191F28', marginBottom: 16 }}>발송 로그 열람·클릭 현황</p>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
+                      {[
+                        { label: '총 발송', value: sendLogs.length, unit: '건', color: '#191F28' },
+                        { label: '열람율', value: sendLogs.length ? Math.round(sendLogs.filter(l => l.open_at).length / sendLogs.length * 100) : 0, unit: '%', color: '#0A66C2' },
+                        { label: '클릭율', value: sendLogs.length ? Math.round(sendLogs.filter(l => l.click_at).length / sendLogs.length * 100) : 0, unit: '%', color: '#005957' },
+                      ].map(s => (
+                        <div key={s.label} style={{ background: '#F8F9FA', borderRadius: 10, padding: '14px 16px', textAlign: 'center' }}>
+                          <p style={{ fontSize: 11, color: '#8B95A1', fontWeight: 600, marginBottom: 6 }}>{s.label}</p>
+                          <p style={{ fontSize: 28, fontWeight: 800, color: s.color }}>{s.value}<span style={{ fontSize: 14, fontWeight: 500, color: '#8B95A1' }}>{s.unit}</span></p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </>
             )}
           </div>
         )}

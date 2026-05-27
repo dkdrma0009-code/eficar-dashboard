@@ -1,8 +1,10 @@
 'use client';
 
 import { useState, useMemo } from 'react';
+import { useRouter } from 'next/navigation';
 import { useDashboardData } from '@/lib/DataContext';
 import { computeViewData, formatCurrency, formatPercent } from '@/lib/dataUtils';
+import { addCampaign } from '@/lib/campaignStorage';
 import type { CustomerStats } from '@/lib/types';
 import type { TargetingInput } from '@/app/api/targeting-message/route';
 
@@ -38,12 +40,22 @@ function GradeBadge({ grade }: { grade: string }) {
   );
 }
 
-function CopyButton({ text }: { text: string }) {
+function CopyButton({ text, channel, customer }: { text: string; channel: string; customer: string }) {
   const [copied, setCopied] = useState(false);
   function copy() {
     navigator.clipboard.writeText(text).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
+      if (customer) {
+        addCampaign({
+          date: new Date().toISOString().slice(0, 10),
+          customer,
+          channel: channel as 'kakao' | 'email' | 'linkedin' | 'etc',
+          contentSummary: `타겟 메시지 — ${channel}`,
+          outcome: 'sent',
+          note: '',
+        });
+      }
     });
   }
   return (
@@ -58,6 +70,7 @@ function CopyButton({ text }: { text: string }) {
 
 export default function TargetingPage() {
   const { data: dashboardData } = useDashboardData();
+  const router = useRouter();
   const [selected, setSelected] = useState<CustomerStats | null>(null);
   const [manualName, setManualName] = useState('');
   const [additionalContext, setAdditionalContext] = useState('');
@@ -291,7 +304,7 @@ export default function TargetingPage() {
                       <span className="text-lg">💬</span>
                       <span className="font-bold text-gray-800">카카오톡 메시지</span>
                     </div>
-                    <CopyButton text={messages.kakao} />
+                    <CopyButton text={messages.kakao} channel="kakao" customer={targetName} />
                   </div>
                   <div className="bg-[#FEE500]/10 rounded-xl p-4 whitespace-pre-wrap text-sm text-gray-800 leading-relaxed">
                     {messages.kakao}
@@ -307,7 +320,7 @@ export default function TargetingPage() {
                       <span className="text-lg">📧</span>
                       <span className="font-bold text-gray-800">이메일</span>
                     </div>
-                    <CopyButton text={`제목: ${messages.email.subject}\n\n${messages.email.body}`} />
+                    <CopyButton text={`제목: ${messages.email.subject}\n\n${messages.email.body}`} channel="email" customer={targetName} />
                   </div>
                   <div className="mb-3">
                     <div className="text-xs font-semibold text-gray-500 mb-1">제목</div>
@@ -332,7 +345,7 @@ export default function TargetingPage() {
                       <span className="text-lg">💼</span>
                       <span className="font-bold text-gray-800">LinkedIn 포스트</span>
                     </div>
-                    <CopyButton text={messages.linkedin} />
+                    <CopyButton text={messages.linkedin} channel="linkedin" customer={targetName} />
                   </div>
                   <div className="bg-[#0A66C2]/5 rounded-xl p-4 whitespace-pre-wrap text-sm text-gray-800 leading-relaxed">
                     {messages.linkedin}
@@ -340,14 +353,24 @@ export default function TargetingPage() {
                 </div>
               )}
 
-              {/* Regenerate */}
-              <button
-                onClick={generate}
-                disabled={loading}
-                className="w-full py-3 rounded-xl border-2 border-dashed border-gray-200 text-sm text-gray-500 hover:border-[#005957] hover:text-[#005957] transition-colors font-semibold"
-              >
-                다시 생성
-              </button>
+              {/* Regenerate + 콘텐츠 생성기 이동 */}
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button
+                  onClick={generate}
+                  disabled={loading}
+                  className="flex-1 py-3 rounded-xl border-2 border-dashed border-gray-200 text-sm text-gray-500 hover:border-[#005957] hover:text-[#005957] transition-colors font-semibold"
+                >
+                  다시 생성
+                </button>
+                {targetName && (
+                  <button
+                    onClick={() => router.push(`/content?customer=${encodeURIComponent(targetName)}`)}
+                    style={{ padding: '10px 20px', borderRadius: 12, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 700, background: '#005957', color: 'white', whiteSpace: 'nowrap' }}
+                  >
+                    📤 SMS · 카카오 발송하기
+                  </button>
+                )}
+              </div>
             </div>
           )}
         </div>

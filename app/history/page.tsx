@@ -2,7 +2,8 @@
 
 import { useEffect, useState, useMemo } from 'react';
 import { getSendLogs, type SendLog } from '@/lib/sendLogStorage';
-import { BarChart2, Mail, MessageSquare, Image, Phone, Filter } from 'lucide-react';
+import { downloadExcel } from '@/lib/exportExcel';
+import { BarChart2, Mail, MessageSquare, Image, Phone, Filter, Download } from 'lucide-react';
 
 const CHANNEL_LABELS: Record<string, string> = {
   sms: 'SMS', lms: 'LMS', mms: 'MMS', kakao: '카카오', email: '이메일',
@@ -90,12 +91,34 @@ export default function HistoryPage() {
   return (
     <div style={{ maxWidth: 1100, margin: '0 auto', padding: '28px 24px' }}>
       {/* 헤더 */}
-      <div style={{ marginBottom: 24 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-          <BarChart2 style={{ width: 20, height: 20, color: '#005957' }} />
-          <h1 style={{ fontSize: 22, fontWeight: 800, color: '#1A2332', margin: 0 }}>발송 이력</h1>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 24 }}>
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+            <BarChart2 style={{ width: 20, height: 20, color: '#005957' }} />
+            <h1 style={{ fontSize: 22, fontWeight: 800, color: '#1A2332', margin: 0 }}>발송 이력</h1>
+          </div>
+          <p style={{ fontSize: 13, color: '#8B95A1', margin: 0 }}>SMS·LMS·MMS·카카오 발송 기록 및 열람/클릭 추적</p>
         </div>
-        <p style={{ fontSize: 13, color: '#8B95A1', margin: 0 }}>SMS·LMS·MMS·카카오 발송 기록 및 열람/클릭 추적</p>
+        {filtered.length > 0 && (
+          <button
+            onClick={() => {
+              const rows = filtered.map(l => ({
+                '발송일시': l.sent_at?.slice(0, 16).replace('T', ' ') ?? '',
+                '채널': CHANNEL_LABELS[l.channel] ?? l.channel,
+                '고객사': l.customer ?? '',
+                '수신번호': l.receiver_masked ?? '',
+                '내용 미리보기': l.content_preview ?? '',
+                '상태': STATUS_CONFIG[l.status]?.label ?? l.status,
+                '열람일시': l.open_at?.slice(0, 16).replace('T', ' ') ?? '',
+                '클릭일시': l.click_at?.slice(0, 16).replace('T', ' ') ?? '',
+              }));
+              downloadExcel(rows, `발송이력_${new Date().toISOString().slice(0, 10)}.xlsx`);
+            }}
+            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 8, border: '1px solid #E2E8F0', background: 'white', color: '#4A5568', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
+          >
+            <Download style={{ width: 14, height: 14 }} /> 엑셀 내보내기
+          </button>
+        )}
       </div>
 
       {/* 통계 카드 */}

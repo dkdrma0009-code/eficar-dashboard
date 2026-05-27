@@ -4,11 +4,12 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useDashboardData } from '@/lib/DataContext';
 import { computeViewData } from '@/lib/dataUtils';
-import { useMemo } from 'react';
+import { getCampaigns } from '@/lib/campaignStorage';
+import { useMemo, useEffect, useState } from 'react';
 import {
   Zap, LayoutDashboard, Users, FileText, Sparkles,
   Image, BarChart2, Send, Calendar, BookOpen,
-  GitCompare, Upload, Newspaper, History,
+  GitCompare, Upload, Newspaper, History, Contact, Bell,
 } from 'lucide-react';
 
 const SECTIONS = [
@@ -35,6 +36,7 @@ const SECTIONS = [
     items: [
       { href: '/campaigns', label: '캠페인',        icon: Send },
       { href: '/history',   label: '발송 이력',     icon: History },
+      { href: '/crm',       label: 'CRM 연락처',    icon: Contact },
       { href: '/calendar',  label: '콘텐츠 캘린더', icon: Calendar },
       { href: '/library',   label: '라이브러리',    icon: BookOpen },
     ],
@@ -57,6 +59,24 @@ export default function Sidebar() {
     const vd = computeViewData(data.records, data.currentMonth, data.customers, data.latestMonth);
     return vd.customerStats.filter(c => c.growthRate < -20 || c.grade === 'danger' || c.grade === 'warning').length;
   }, [data]);
+
+  const [scheduledToday, setScheduledToday] = useState<string[]>([]);
+  const [dismissedToday, setDismissedToday] = useState(false);
+
+  useEffect(() => {
+    const today = new Date().toISOString().slice(0, 10);
+    const dismissed = sessionStorage.getItem('sched-dismissed') === today;
+    if (dismissed) { setDismissedToday(true); return; }
+    const records = getCampaigns();
+    const todayItems = records.filter(r => r.scheduledDate === today).map(r => r.customer);
+    setScheduledToday(todayItems);
+  }, []);
+
+  const dismissScheduled = () => {
+    const today = new Date().toISOString().slice(0, 10);
+    sessionStorage.setItem('sched-dismissed', today);
+    setDismissedToday(true);
+  };
 
   const isActive = (href: string, exact?: boolean) => {
     if (exact) return pathname === href;
@@ -123,6 +143,27 @@ export default function Sidebar() {
           </div>
         ))}
       </nav>
+
+      {/* 예약 발송 알림 */}
+      {scheduledToday.length > 0 && !dismissedToday && (
+        <div style={{ margin: '0 10px 8px', padding: '10px 12px', background: '#EFF6FF', border: '1px solid #BFDBFE', borderRadius: 10 }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6 }}>
+            <Bell style={{ width: 13, height: 13, color: '#2563EB', flexShrink: 0, marginTop: 1 }} />
+            <div style={{ flex: 1 }}>
+              <p style={{ fontSize: 11, fontWeight: 700, color: '#1E40AF', margin: '0 0 2px' }}>오늘 예약 발송 {scheduledToday.length}건</p>
+              <p style={{ fontSize: 11, color: '#3B82F6', margin: 0, lineHeight: 1.4 }}>
+                {[...new Set(scheduledToday)].slice(0, 2).join(', ')}{scheduledToday.length > 2 ? ` 외 ${scheduledToday.length - 2}건` : ''}
+              </p>
+            </div>
+            <button onClick={dismissScheduled} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#93C5FD', padding: 0, lineHeight: 0 }}>
+              <span style={{ fontSize: 14 }}>×</span>
+            </button>
+          </div>
+          <Link href="/campaigns" style={{ display: 'block', marginTop: 6, fontSize: 11, fontWeight: 700, color: '#2563EB', textDecoration: 'none', textAlign: 'center', padding: '4px 0', background: 'white', borderRadius: 6 }}>
+            캠페인 확인 →
+          </Link>
+        </div>
+      )}
 
       {/* 파일 상태 */}
       <div style={{ padding: '12px 14px', borderTop: '1px solid #F2F4F6' }}>
