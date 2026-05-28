@@ -377,6 +377,7 @@ export default function ContentPage() {
   const [clickTrackEnabled, setClickTrackEnabled] = useState(false);
   const [clickTargetUrl, setClickTargetUrl] = useState('https://eficar.co.kr');
   const [clickUrlCopied, setClickUrlCopied] = useState(false);
+  const [ctaButtonLabel, setCtaButtonLabel] = useState('자세히 보기');
 
   // LinkedIn 직접 게시 상태
   const [liToken, setLiToken] = useState<string>('');
@@ -1408,42 +1409,75 @@ export default function ContentPage() {
                           </div>
                         </div>
                       )}
-                      {/* 이메일 링크 클릭 추적 */}
+                      {/* 이메일 CTA 버튼 + 클릭 추적 */}
                       <label style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8, cursor: 'pointer', userSelect: 'none' }}>
                         <input type="checkbox" checked={clickTrackEnabled} onChange={e => {
                           setClickTrackEnabled(e.target.checked);
                           if (e.target.checked) setSmsTrackId(generateLogId());
                           setClickUrlCopied(false);
                         }} style={{ accentColor: '#005957', width: 14, height: 14 }} />
-                        <span style={{ fontSize: 12, fontWeight: 600, color: clickTrackEnabled ? '#005957' : '#8B95A1' }}>링크 클릭 추적 포함</span>
+                        <span style={{ fontSize: 12, fontWeight: 600, color: clickTrackEnabled ? '#005957' : '#8B95A1' }}>CTA 버튼 + 클릭 추적 포함</span>
                       </label>
                       {clickTrackEnabled && (
-                        <div style={{ marginTop: 6, padding: '10px 12px', background: '#F0FDF9', borderRadius: 7, border: '1px solid #A7F3D0' }}>
-                          <p style={{ fontSize: 11, color: '#005957', fontWeight: 700, marginBottom: 6 }}>🔗 클릭 추적 URL</p>
-                          <div style={{ marginBottom: 6 }}>
-                            <input
-                              value={clickTargetUrl}
-                              onChange={e => { setClickTargetUrl(e.target.value); setClickUrlCopied(false); }}
-                              placeholder="https://eficar.co.kr/..."
-                              style={{ width: '100%', padding: '6px 8px', border: '1px solid #A7F3D0', borderRadius: 6, fontSize: 12, fontFamily: 'inherit', background: 'white' }}
-                            />
+                        <div style={{ marginTop: 6, padding: '12px 14px', background: '#F0FDF9', borderRadius: 8, border: '1px solid #A7F3D0', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                          <p style={{ fontSize: 11, color: '#005957', fontWeight: 700 }}>🔘 뉴스레터 CTA 버튼 생성</p>
+                          <div style={{ display: 'flex', gap: 8 }}>
+                            <div style={{ flex: 1 }}>
+                              <p style={{ fontSize: 10, color: '#8B95A1', fontWeight: 600, marginBottom: 3 }}>버튼 텍스트</p>
+                              <input
+                                value={ctaButtonLabel}
+                                onChange={e => { setCtaButtonLabel(e.target.value); setClickUrlCopied(false); }}
+                                placeholder="자세히 보기"
+                                style={{ width: '100%', padding: '6px 8px', border: '1px solid #A7F3D0', borderRadius: 6, fontSize: 12, fontFamily: 'inherit', background: 'white' }}
+                              />
+                            </div>
+                            <div style={{ flex: 2 }}>
+                              <p style={{ fontSize: 10, color: '#8B95A1', fontWeight: 600, marginBottom: 3 }}>이동할 URL</p>
+                              <input
+                                value={clickTargetUrl}
+                                onChange={e => { setClickTargetUrl(e.target.value); setClickUrlCopied(false); }}
+                                placeholder="https://eficar.co.kr/..."
+                                style={{ width: '100%', padding: '6px 8px', border: '1px solid #A7F3D0', borderRadius: 6, fontSize: 12, fontFamily: 'inherit', background: 'white' }}
+                              />
+                            </div>
                           </div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                            <code style={{ fontSize: 10, color: '#374151', background: 'white', padding: '4px 6px', borderRadius: 4, border: '1px solid #E5E7EB', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                              {buildClickTrackUrl(smsTrackId, clickTargetUrl)}
-                            </code>
-                            <button
-                              onClick={() => {
-                                navigator.clipboard.writeText(buildClickTrackUrl(smsTrackId, clickTargetUrl));
-                                setClickUrlCopied(true);
-                                setTimeout(() => setClickUrlCopied(false), 2000);
+                          {/* 미리보기 */}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                            <span style={{ fontSize: 11, color: '#8B95A1', fontWeight: 600, flexShrink: 0 }}>미리보기</span>
+                            <a
+                              href="#"
+                              onClick={e => e.preventDefault()}
+                              style={{
+                                display: 'inline-block', padding: '8px 20px', borderRadius: 7,
+                                background: '#005957', color: 'white', fontSize: 13, fontWeight: 700,
+                                textDecoration: 'none', letterSpacing: '-0.2px',
                               }}
-                              style={{ padding: '4px 10px', borderRadius: 6, border: `1px solid ${clickUrlCopied ? '#16A34A' : '#005957'}`, background: clickUrlCopied ? '#F0FDF4' : 'white', color: clickUrlCopied ? '#16A34A' : '#005957', fontSize: 11, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}
                             >
-                              {clickUrlCopied ? '✅ 복사됨' : '복사'}
-                            </button>
+                              {ctaButtonLabel || '버튼 텍스트'}
+                            </a>
                           </div>
-                          <p style={{ fontSize: 10, color: '#8B95A1', marginTop: 4 }}>이 URL을 이메일 본문 링크에 삽입하세요.</p>
+                          {/* HTML 복사 */}
+                          <button
+                            onClick={() => {
+                              const trackedUrl = buildClickTrackUrl(smsTrackId, clickTargetUrl);
+                              const label = ctaButtonLabel || '자세히 보기';
+                              const html = `<a href="${trackedUrl}" target="_blank" style="display:inline-block;padding:10px 24px;background:#005957;color:#ffffff;text-decoration:none;border-radius:8px;font-size:14px;font-weight:700;letter-spacing:-0.2px;">${label}</a>`;
+                              navigator.clipboard.writeText(html);
+                              setClickUrlCopied(true);
+                              setTimeout(() => setClickUrlCopied(false), 2500);
+                            }}
+                            style={{
+                              padding: '8px 16px', borderRadius: 7, fontSize: 12, fontWeight: 700, cursor: 'pointer',
+                              border: `1px solid ${clickUrlCopied ? '#16A34A' : '#005957'}`,
+                              background: clickUrlCopied ? '#F0FDF4' : '#005957',
+                              color: clickUrlCopied ? '#16A34A' : 'white',
+                            }}
+                          >
+                            {clickUrlCopied ? '✅ HTML 복사됨 — 이메일에 붙여넣기' : '📋 버튼 HTML 복사 (이메일에 붙여넣기)'}
+                          </button>
+                          <p style={{ fontSize: 10, color: '#8B95A1' }}>
+                            HTML 이메일 에디터(Stibee, Mailchimp 등)에서 HTML 블록에 붙여넣으세요. 수신자가 버튼을 클릭하면 자동으로 기록됩니다.
+                          </p>
                         </div>
                       )}
                     </div>
