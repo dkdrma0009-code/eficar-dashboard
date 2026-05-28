@@ -6,6 +6,7 @@ import { parseExcelFile } from '@/lib/parseExcel';
 import { buildDashboardData, computeViewData, formatCurrency, formatPercent, formatMonth } from '@/lib/dataUtils';
 import { useDashboardData } from '@/lib/DataContext';
 import { getCampaigns } from '@/lib/campaignStorage';
+import { getAllCRM } from '@/lib/crmStorage';
 import { getActivities, fetchActivitiesFromDB, ActivityItem } from '@/lib/activityStorage';
 import { getMemory } from '@/lib/aiMemoryStorage';
 import { computeStrategicInsights, computePriorityRankings } from '@/lib/intelligenceEngine';
@@ -175,6 +176,27 @@ function AIStudio({ data }: { data: DashboardData }) {
       .slice(0, 2),
     [viewData],
   );
+
+  // ── CRM 미팅 리마인더 ──
+  const crmReminders = useMemo(() => {
+    if (typeof window === 'undefined') return [];
+    const today = new Date();
+    const todayStr = today.toISOString().slice(0, 10);
+    const next7 = new Date(today);
+    next7.setDate(today.getDate() + 7);
+    const next7Str = next7.toISOString().slice(0, 10);
+    const crm = getAllCRM();
+    return Object.entries(crm)
+      .filter(([, note]) => note.nextMeeting && note.nextMeeting >= todayStr && note.nextMeeting <= next7Str)
+      .map(([customer, note]) => {
+        const d = new Date(note.nextMeeting);
+        const diff = Math.round((d.getTime() - today.setHours(0, 0, 0, 0)) / 86_400_000);
+        const label = diff === 0 ? '오늘' : diff === 1 ? '내일' : `${diff}일 후`;
+        const isUrgent = diff <= 1;
+        return { customer, date: note.nextMeeting, label, isUrgent, contact: note.contacts?.[0] };
+      })
+      .sort((a, b) => a.date.localeCompare(b.date));
+  }, []);
 
   // ── 상태 ──
   const [drawerCtx, setDrawerCtx] = useState<DrawerCtx>(null);
@@ -693,6 +715,65 @@ function AIStudio({ data }: { data: DashboardData }) {
 
           {/* ── 좌측 ── */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+
+            {/* 0. CRM 미팅 리마인더 */}
+            {crmReminders.length > 0 && (
+              <div className="animate-slide-up">
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                  <span style={{ fontSize: 13 }}>📅</span>
+                  <h2 style={{ fontSize: 13, fontWeight: 700, color: '#191F28' }}>미팅 리마인더</h2>
+                  <span style={{ fontSize: 11, color: '#B0B8C1' }}>· {crmReminders.length}건</span>
+                </div>
+                <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+                  {crmReminders.map((r, i) => (
+                    <div key={r.customer} style={{
+                      padding: '12px 18px',
+                      borderBottom: i < crmReminders.length - 1 ? '1px solid #F8F9FA' : 'none',
+                      background: r.isUrgent ? '#FFFBEB' : 'white',
+                      display: 'flex', alignItems: 'center', gap: 12,
+                    }}>
+                      <div style={{
+                        width: 36, height: 36, borderRadius: 10, flexShrink: 0,
+                        background: r.isUrgent ? '#FEF3C7' : '#E6F2F2',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      }}>
+                        <span style={{ fontSize: 16 }}>{r.isUrgent ? '⚠️' : '📅'}</span>
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+                          <span style={{ fontSize: 13, fontWeight: 700, color: '#191F28' }}>{r.customer}</span>
+                          <span style={{
+                            padding: '1px 7px', borderRadius: 10, fontSize: 11, fontWeight: 700,
+                            background: r.isUrgent ? '#FDE68A' : '#E6F2F2',
+                            color: r.isUrgent ? '#B45309' : '#005957',
+                          }}>{r.label}</span>
+                          <span style={{ fontSize: 11, color: '#8B95A1' }}>{r.date}</span>
+                        </div>
+                        {r.contact && (
+                          <p style={{ fontSize: 11, color: '#8B95A1' }}>
+                            {r.contact.name}{r.contact.role ? ` · ${r.contact.role}` : ''}{r.contact.phone ? ` · ${r.contact.phone}` : ''}
+                          </p>
+                        )}
+                      </div>
+                      <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                        <button
+                          onClick={() => router.push(`/content?customer=${encodeURIComponent(r.customer)}`)}
+                          style={{ padding: '5px 11px', borderRadius: 7, background: '#005957', color: 'white', border: 'none', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}
+                        >
+                          메시지 생성
+                        </button>
+                        <button
+                          onClick={() => router.push('/crm')}
+                          style={{ padding: '5px 11px', borderRadius: 7, background: 'white', color: '#4A5568', border: '1px solid #E8ECEF', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}
+                        >
+                          CRM 보기
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* 1. Today Focus */}
             <div className="animate-slide-up">

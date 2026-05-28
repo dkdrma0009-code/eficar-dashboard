@@ -1,6 +1,6 @@
 'use client';
 import { useState, useMemo, useEffect } from 'react';
-import { Sparkles, Copy, Check, AlertTriangle, TrendingUp, TrendingDown, FileText, Pencil, X, Brain } from 'lucide-react';
+import { Sparkles, Copy, Check, AlertTriangle, TrendingUp, TrendingDown, FileText, Pencil, X, Brain, ExternalLink, BookOpen } from 'lucide-react';
 import { useDashboardData } from '@/lib/DataContext';
 import { getCampaigns } from '@/lib/campaignStorage';
 import { categorizeProduct } from '@/lib/dataUtils';
@@ -32,6 +32,9 @@ export default function ProposalPage() {
   const [draft, setDraft] = useState<ProposalResult | null>(null);
   const [editMode, setEditMode] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [notionSaving, setNotionSaving] = useState(false);
+  const [notionUrl, setNotionUrl] = useState('');
+  const [notionError, setNotionError] = useState('');
 
   const customers = useMemo(() => {
     if (!data) return [];
@@ -108,6 +111,37 @@ export default function ProposalPage() {
     navigator.clipboard.writeText(proposalText).then(() => {
       setCopied(true); setTimeout(() => setCopied(false), 2000);
     });
+  };
+
+  const saveToNotion = async () => {
+    if (!draft) return;
+    setNotionSaving(true);
+    setNotionError('');
+    setNotionUrl('');
+    try {
+      const res = await fetch('/api/notion-proposal', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          customer: selectedCustomer,
+          month: customerData?.currentMonth ?? '',
+          title: draft.title,
+          greeting: draft.greeting,
+          currentAchievement: draft.currentAchievement,
+          proposalItems: draft.proposalItems,
+          roiSummary: draft.roiSummary,
+          nextStep: draft.nextStep,
+          closing: draft.closing,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error);
+      setNotionUrl(json.url);
+    } catch (e) {
+      setNotionError(e instanceof Error ? e.message : 'Notion 저장 실패');
+    } finally {
+      setNotionSaving(false);
+    }
   };
 
   // helpers
@@ -279,6 +313,20 @@ export default function ProposalPage() {
                 {copied ? <Check style={{ width: 13, height: 13 }} /> : <Copy style={{ width: 13, height: 13 }} />}
                 {copied ? '복사됨' : '전체 복사'}
               </button>
+              <button onClick={saveToNotion} disabled={notionSaving} style={{
+                display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px',
+                borderRadius: 8, border: `1px solid ${notionUrl ? '#86EFAC' : '#F2F4F6'}`,
+                background: notionUrl ? '#F0FDF4' : 'white',
+                color: notionUrl ? '#16A34A' : '#8B95A1',
+                fontSize: 13, fontWeight: 600, cursor: notionSaving ? 'not-allowed' : 'pointer',
+                opacity: notionSaving ? 0.7 : 1,
+              }}>
+                {notionUrl
+                  ? <><Check style={{ width: 13, height: 13 }} /> 저장됨</>
+                  : notionSaving ? '저장 중...'
+                  : <><ExternalLink style={{ width: 13, height: 13 }} /> Notion</>
+                }
+              </button>
             </div>
           </div>
 
@@ -382,23 +430,54 @@ export default function ProposalPage() {
             </Section>
           </div>
 
-          <div style={{ marginTop: 24, paddingTop: 20, borderTop: '1px solid #F2F4F6', display: 'flex', gap: 10, alignItems: 'center' }}>
-            <button onClick={() => {
-              if (!draft) return;
-              const ctx = {
-                title: draft.title,
-                items: (draft.proposalItems ?? []).map((p: ProposalItem) => `${p.item}: ${p.benefit}`).join(' / '),
-                nextStep: draft.nextStep,
-              };
-              try { sessionStorage.setItem('eficar-proposal-context', JSON.stringify(ctx)); } catch {}
-              window.location.href = `/content?customer=${encodeURIComponent(selectedCustomer)}`;
-            }} style={{
-              display: 'flex', alignItems: 'center', gap: 6, padding: '9px 18px', borderRadius: 8,
-              background: '#005957', color: 'white', fontSize: 13, fontWeight: 700, border: 'none', cursor: 'pointer',
-            }}>
-              📋 제안서 기반 콘텐츠 생성 →
-            </button>
-            <span style={{ fontSize: 12, color: '#8B95A1' }}>제안 품목·다음 단계가 문구에 자동 반영됩니다</span>
+          <div style={{ marginTop: 24, paddingTop: 20, borderTop: '1px solid #F2F4F6' }}>
+            <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+              <button onClick={() => {
+                if (!draft) return;
+                const ctx = {
+                  title: draft.title,
+                  items: (draft.proposalItems ?? []).map((p: ProposalItem) => `${p.item}: ${p.benefit}`).join(' / '),
+                  nextStep: draft.nextStep,
+                };
+                try { sessionStorage.setItem('eficar-proposal-context', JSON.stringify(ctx)); } catch {}
+                window.location.href = `/content?customer=${encodeURIComponent(selectedCustomer)}`;
+              }} style={{
+                display: 'flex', alignItems: 'center', gap: 6, padding: '9px 18px', borderRadius: 8,
+                background: '#005957', color: 'white', fontSize: 13, fontWeight: 700, border: 'none', cursor: 'pointer',
+              }}>
+                <FileText style={{ width: 14, height: 14 }} /> 제안서 기반 콘텐츠 생성 →
+              </button>
+              <button onClick={copy} style={{
+                display: 'flex', alignItems: 'center', gap: 6, padding: '9px 16px', borderRadius: 8,
+                background: 'white', color: copied ? '#005957' : '#4A5568', fontSize: 13, fontWeight: 600,
+                border: `1px solid ${copied ? '#005957' : '#E2E8F0'}`, cursor: 'pointer',
+              }}>
+                {copied ? <Check style={{ width: 13, height: 13 }} /> : <BookOpen style={{ width: 13, height: 13 }} />}
+                {copied ? '복사됨' : '전문 복사'}
+              </button>
+              <button onClick={saveToNotion} disabled={notionSaving} style={{
+                display: 'flex', alignItems: 'center', gap: 6, padding: '9px 16px', borderRadius: 8,
+                background: notionUrl ? '#F0FDF4' : 'white',
+                color: notionUrl ? '#16A34A' : '#374151',
+                border: `1px solid ${notionUrl ? '#86EFAC' : '#E2E8F0'}`,
+                fontSize: 13, fontWeight: 600, cursor: notionSaving ? 'not-allowed' : 'pointer',
+                opacity: notionSaving ? 0.7 : 1,
+              }}>
+                {notionUrl
+                  ? <><Check style={{ width: 13, height: 13 }} /> Notion 저장됨</>
+                  : notionSaving
+                  ? '저장 중...'
+                  : <><ExternalLink style={{ width: 13, height: 13 }} /> Notion에 저장</>
+                }
+              </button>
+              {notionUrl && (
+                <a href={notionUrl} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, color: '#2563EB', textDecoration: 'none', fontWeight: 600 }}>
+                  Notion에서 열기 →
+                </a>
+              )}
+              {notionError && <span style={{ fontSize: 12, color: '#F04452' }}>{notionError}</span>}
+            </div>
+            <p style={{ fontSize: 12, color: '#8B95A1', marginTop: 8 }}>제안 품목·다음 단계가 문구에 자동 반영됩니다</p>
           </div>
         </div>
       )}

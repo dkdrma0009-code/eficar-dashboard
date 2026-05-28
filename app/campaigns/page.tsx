@@ -7,13 +7,17 @@ import * as XLSX from 'xlsx';
 import { downloadExcel } from '@/lib/exportExcel';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, Legend } from 'recharts';
 import { getCampaigns, addCampaign, updateCampaign, deleteCampaign, isDuplicateCampaign, type CampaignRecord, type CampaignChannel, type CampaignOutcome } from '@/lib/campaignStorage';
-import { getSendLogs, type SendLog } from '@/lib/sendLogStorage';
+import { getSendLogs, addSendLog, type SendLog } from '@/lib/sendLogStorage';
+import { getCRMNote } from '@/lib/crmStorage';
 import { useDashboardData } from '@/lib/DataContext';
 
-const CHANNELS: { value: CampaignChannel; label: string; emoji: string }[] = [
+const CHANNELS: { value: CampaignChannel; label: string; emoji: string; canAutoSend?: boolean }[] = [
   { value: 'linkedin', label: 'LinkedIn',  emoji: '💼' },
-  { value: 'kakao',    label: '카카오톡',  emoji: '💬' },
+  { value: 'kakao',    label: '카카오톡',  emoji: '💬', canAutoSend: true },
   { value: 'email',    label: '이메일',    emoji: '📧' },
+  { value: 'sms',      label: 'SMS',       emoji: '📱', canAutoSend: true },
+  { value: 'lms',      label: 'LMS',       emoji: '📄', canAutoSend: true },
+  { value: 'mms',      label: 'MMS',       emoji: '🖼️', canAutoSend: true },
   { value: 'cardnews', label: '카드뉴스',  emoji: '🃏' },
   { value: 'etc',      label: '기타',      emoji: '📌' },
 ];
@@ -28,6 +32,7 @@ const OUTCOMES: { value: CampaignOutcome; label: string; color: string; bg: stri
 
 const EMPTY: Omit<CampaignRecord, 'id' | 'createdAt'> = {
   date: '', customer: '', channel: 'kakao', contentSummary: '', outcome: 'sent', note: '', scheduledDate: '',
+  phoneNumber: '', messageContent: '',
 };
 
 interface ImportRow {
@@ -62,6 +67,8 @@ export default function CampaignsPage() {
   const today = new Date().toISOString().slice(0, 10);
   const [emailSending, setEmailSending] = useState(false);
   const [emailResult, setEmailResult] = useState('');
+  const [autoSendingId, setAutoSendingId] = useState<string | null>(null);
+  const [autoSendResults, setAutoSendResults] = useState<Record<string, '발송중' | '완료' | '실패'>>({});
 
   const searchParams = useSearchParams();
 
@@ -320,9 +327,53 @@ export default function CampaignsPage() {
   }
 
   function openEdit(r: CampaignRecord) {
-    setForm({ date: r.date, customer: r.customer, channel: r.channel, contentSummary: r.contentSummary, outcome: r.outcome, note: r.note, scheduledDate: r.scheduledDate ?? '' });
+    setForm({ date: r.date, customer: r.customer, channel: r.channel, contentSummary: r.contentSummary, outcome: r.outcome, note: r.note, scheduledDate: r.scheduledDate ?? '', phoneNumber: r.phoneNumber ?? '', messageContent: r.messageContent ?? '' });
     setEditId(r.id);
     setShowForm(true);
+  }
+
+  async function handleAutoSend(record: CampaignRecord) {
+    if (!record.messageContent || !record.phoneNumber) return;
+    setAutoSendingId(record.id);
+    setAutoSendResults(prev => ({ ...prev, [record.id]: '발송중' }));
+    try {
+      const channel = record.channel as string;
+      const apiChannel = (channel === 'kakao') ? 'kakao' : 'sms';
+      const endpoint = apiChannel === 'kakao' ? '/api/popbill/kakao' : '/api/popbill/sms';
+      const body: Record<string, string> = {
+        receiver: record.phoneNumber.replace(/-/g, ''),
+        receiverName: record.customer,
+        content: record.messageContent,
+      };
+      if (channel === 'lms' || channel === 'mms') {
+        body.subject = record.contentSummary || `에픽카 × ${record.customer}`;
+      }
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error);
+      updateCampaign(record.id, {
+        sentAt: new Date().toISOString(),
+        receiptNum: json.receiptNum,
+        outcome: 'sent',
+      });
+      addSendLog({
+        channel: (json.msgType as string)?.toLowerCase() as 'sms' | 'lms' | 'mms' | 'kakao' ?? channel as 'sms',
+        customer: record.customer,
+        receiver_masked: record.phoneNumber.slice(-4).padStart(record.phoneNumber.length, '*'),
+        content_preview: record.messageContent.slice(0, 40),
+        receipt_num: json.receiptNum,
+      });
+      setRecords(getCampaigns());
+      setAutoSendResults(prev => ({ ...prev, [record.id]: '완료' }));
+    } catch {
+      setAutoSendResults(prev => ({ ...prev, [record.id]: '실패' }));
+    } finally {
+      setAutoSendingId(null);
+    }
   }
 
   function handleSave() {
@@ -412,16 +463,77 @@ export default function CampaignsPage() {
           </div>
         )}
 
-        {/* 오늘 예약 발송 배너 */}
+        {/* 오늘 예약 발송 실행 센터 */}
         {scheduledToday.length > 0 && (
-          <div style={{ marginBottom: 16, padding: '14px 18px', background: '#EFF6FF', border: '1px solid #BFDBFE', borderRadius: 12, display: 'flex', alignItems: 'center', gap: 12 }}>
-            <Clock style={{ width: 18, height: 18, color: '#2563EB', flexShrink: 0 }} />
-            <div style={{ flex: 1 }}>
-              <p style={{ fontSize: 14, fontWeight: 700, color: '#1E40AF', margin: 0 }}>오늘 예약 발송 {scheduledToday.length}건</p>
-              <p style={{ fontSize: 12, color: '#3B82F6', margin: '2px 0 0' }}>
-                {scheduledToday.map(r => `${r.customer} · ${r.contentSummary || r.channel}`).slice(0, 3).join(' / ')}
-                {scheduledToday.length > 3 ? ` 외 ${scheduledToday.length - 3}건` : ''}
-              </p>
+          <div style={{ marginBottom: 20, background: 'white', border: '2px solid #BFDBFE', borderRadius: 14, overflow: 'hidden' }}>
+            <div style={{ padding: '14px 20px', background: '#EFF6FF', display: 'flex', alignItems: 'center', gap: 10 }}>
+              <Clock style={{ width: 18, height: 18, color: '#2563EB', flexShrink: 0 }} />
+              <div>
+                <p style={{ fontSize: 14, fontWeight: 800, color: '#1E40AF', margin: 0 }}>오늘 예약 발송 센터 — {scheduledToday.length}건</p>
+                <p style={{ fontSize: 11, color: '#3B82F6', margin: '2px 0 0' }}>발송 준비가 된 캠페인에 팝빌 자동 발송 버튼이 표시됩니다</p>
+              </div>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              {scheduledToday.map((r, i) => {
+                const ch = CHANNELS.find(c => c.value === r.channel);
+                const canSend = !!ch?.canAutoSend && !!r.messageContent && !!r.phoneNumber;
+                const crmPhone = r.phoneNumber || getCRMNote(r.customer).contacts?.[0]?.phone || '';
+                const result = autoSendResults[r.id];
+                const alreadySent = !!r.sentAt;
+                return (
+                  <div key={r.id} style={{
+                    padding: '12px 20px',
+                    borderBottom: i < scheduledToday.length - 1 ? '1px solid #F2F4F6' : 'none',
+                    display: 'flex', alignItems: 'center', gap: 14,
+                    background: alreadySent ? '#F0FDF4' : 'white',
+                  }}>
+                    <div style={{ width: 34, height: 34, borderRadius: 10, background: alreadySent ? '#DCFCE7' : '#EFF6FF', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                      <span style={{ fontSize: 16 }}>{alreadySent ? '✅' : (ch?.emoji ?? '📌')}</span>
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3 }}>
+                        <span style={{ fontSize: 13, fontWeight: 700, color: '#191F28' }}>{r.customer}</span>
+                        <span style={{ fontSize: 11, fontWeight: 600, padding: '1px 7px', borderRadius: 10, background: '#F2F4F6', color: '#4A5568' }}>{ch?.label ?? r.channel}</span>
+                        {alreadySent && <span style={{ fontSize: 11, fontWeight: 700, color: '#16A34A', background: '#DCFCE7', padding: '1px 7px', borderRadius: 10 }}>발송완료</span>}
+                      </div>
+                      <p style={{ fontSize: 12, color: '#8B95A1', margin: 0 }}>
+                        {r.contentSummary || '(내용 없음)'}
+                        {crmPhone && <span style={{ marginLeft: 8, fontFamily: 'monospace', color: '#4A5568' }}>{crmPhone}</span>}
+                        {r.sentAt && <span style={{ marginLeft: 8, color: '#16A34A' }}>· {new Date(r.sentAt).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })} 발송</span>}
+                      </p>
+                    </div>
+                    <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                      {!alreadySent && canSend && (
+                        <button
+                          onClick={() => handleAutoSend(r)}
+                          disabled={autoSendingId === r.id}
+                          style={{
+                            padding: '7px 16px', borderRadius: 8, border: 'none', fontSize: 12, fontWeight: 700, cursor: autoSendingId === r.id ? 'not-allowed' : 'pointer',
+                            background: result === '완료' ? '#059669' : result === '실패' ? '#DC2626' : '#005957',
+                            color: 'white', opacity: autoSendingId === r.id ? 0.7 : 1,
+                          }}
+                        >
+                          {result === '발송중' ? '발송 중...' : result === '완료' ? '✅ 완료' : result === '실패' ? '❌ 실패' : '📤 발송 실행'}
+                        </button>
+                      )}
+                      {!alreadySent && !canSend && (
+                        <button
+                          onClick={() => window.location.href = `/content?customer=${encodeURIComponent(r.customer)}`}
+                          style={{ padding: '7px 14px', borderRadius: 8, border: '1px solid #E2E8F0', background: 'white', color: '#4A5568', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
+                        >
+                          메시지 생성 →
+                        </button>
+                      )}
+                      <button
+                        onClick={() => openEdit(r)}
+                        style={{ padding: '7px 10px', borderRadius: 8, border: '1px solid #E2E8F0', background: 'white', color: '#8B95A1', fontSize: 12, cursor: 'pointer' }}
+                      >
+                        편집
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}
@@ -886,6 +998,39 @@ export default function CampaignsPage() {
                   <p style={{ fontSize: 11, color: '#005957', marginTop: 4 }}>📅 {form.scheduledDate} 에 발송 알림이 표시됩니다.</p>
                 )}
               </div>
+
+              {/* 자동 발송 설정 (SMS/LMS/MMS/카카오) */}
+              {(['sms', 'lms', 'mms', 'kakao'] as CampaignChannel[]).includes(form.channel) && form.scheduledDate && (
+                <div style={{ padding: '14px 16px', background: '#F0FDF9', borderRadius: 10, border: '1px solid #A7F3D0', display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  <p style={{ fontSize: 12, fontWeight: 700, color: '#005957', margin: 0 }}>
+                    📤 팝빌 자동 발송 설정 <span style={{ fontSize: 11, fontWeight: 400, color: '#8B95A1' }}>(입력 시 예약일에 바로 발송 가능)</span>
+                  </p>
+                  <div>
+                    <label style={{ fontSize: 11, fontWeight: 600, color: '#8B95A1', display: 'block', marginBottom: 4 }}>수신번호</label>
+                    <input
+                      value={form.phoneNumber ?? ''}
+                      onChange={e => setForm(f => ({ ...f, phoneNumber: e.target.value.replace(/[^0-9-]/g, '') }))}
+                      placeholder={`CRM 등록 번호: ${getCRMNote(form.customer).contacts?.[0]?.phone || '없음'}`}
+                      style={{ width: '100%', padding: '8px 10px', border: '1px solid #A7F3D0', borderRadius: 7, fontSize: 13, fontFamily: 'monospace', background: 'white' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: 11, fontWeight: 600, color: '#8B95A1', display: 'block', marginBottom: 4 }}>발송 메시지</label>
+                    <textarea
+                      value={form.messageContent ?? ''}
+                      onChange={e => setForm(f => ({ ...f, messageContent: e.target.value }))}
+                      rows={4}
+                      placeholder="발송할 메시지 내용을 입력하세요"
+                      style={{ width: '100%', padding: '8px 10px', border: '1px solid #A7F3D0', borderRadius: 7, fontSize: 13, fontFamily: 'inherit', resize: 'vertical', background: 'white' }}
+                    />
+                    {form.channel === 'sms' && form.messageContent && (
+                      <p style={{ fontSize: 11, color: form.messageContent.length > 90 ? '#DC2626' : '#8B95A1', marginTop: 4 }}>
+                        {form.messageContent.length}자 {form.messageContent.length > 90 ? '— 90자 초과 시 LMS로 자동 변환' : ''}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
             <div style={{ display: 'flex', gap: 8, marginTop: 20 }}>
               {editId && <button onClick={() => { handleDelete(editId); setShowForm(false); }} style={{ padding: '10px 16px', borderRadius: 8, border: '1px solid #FEE2E2', background: '#FEF2F2', color: '#DC2626', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>삭제</button>}

@@ -2,7 +2,7 @@ import { syncUpsert, syncDelete } from './syncManager';
 
 const KEY = 'eficar-campaigns';
 
-export type CampaignChannel = 'linkedin' | 'kakao' | 'email' | 'cardnews' | 'etc';
+export type CampaignChannel = 'linkedin' | 'kakao' | 'email' | 'cardnews' | 'sms' | 'lms' | 'mms' | 'etc';
 export type CampaignOutcome = 'sent' | 'responded' | 'meeting' | 'proposal' | 'closed';
 
 export interface CampaignRecord {
@@ -14,7 +14,11 @@ export interface CampaignRecord {
   outcome: CampaignOutcome;
   note: string;
   createdAt: string;
-  scheduledDate?: string; // 'YYYY-MM-DD' — 예약 발송일
+  scheduledDate?: string;   // 'YYYY-MM-DD' — 예약 발송일
+  phoneNumber?: string;     // 수신번호 (SMS/LMS/MMS/카카오 자동 발송용)
+  messageContent?: string;  // 발송 메시지 전문
+  sentAt?: string;          // 실제 발송 완료 시각 (ISO)
+  receiptNum?: string;      // 팝빌 접수 번호
 }
 
 function load(): CampaignRecord[] {

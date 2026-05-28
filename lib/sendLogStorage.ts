@@ -11,6 +11,9 @@ export interface SendLog {
   sent_at: string;
   open_at?: string;
   click_at?: string;
+  popbill_result?: string;   // '0' = 정상수신, 그 외 = 실패 코드
+  popbill_msg?: string;      // 팝빌 결과 메시지
+  delivered_at?: string;     // 수신 완료 시각 (ISO)
 }
 
 function getClient() {
@@ -62,6 +65,21 @@ export async function getSendLogs(customer?: string, limit = 50): Promise<SendLo
   if (customer) q = q.eq('customer', customer);
   const { data } = await q;
   return (data ?? []) as SendLog[];
+}
+
+export async function updateDeliveryResult(
+  receiptNum: string,
+  popbillResult: string,
+  popbillMsg: string,
+  deliveredAt?: string,
+): Promise<boolean> {
+  const sb = getClient();
+  if (!sb) return false;
+  const { error } = await sb
+    .from('campaign_send_logs')
+    .update({ popbill_result: popbillResult, popbill_msg: popbillMsg, delivered_at: deliveredAt ?? null })
+    .eq('receipt_num', receiptNum);
+  return !error;
 }
 
 export async function getSendLogStats(customer?: string): Promise<{

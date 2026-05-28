@@ -1,4 +1,3 @@
-// @ts-nocheck
 'use client';
 import { use, useMemo, useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
@@ -7,7 +6,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, Cell,
 } from 'recharts';
-import { ArrowLeft, TrendingUp, TrendingDown, Target, Send, FileText, Plus, ChevronRight, Brain } from 'lucide-react';
+import { ArrowLeft, TrendingUp, TrendingDown, Target, Send, FileText, Plus, ChevronRight, Brain, Phone, Calendar } from 'lucide-react';
 import { useDashboardData } from '@/lib/DataContext';
 import { getCampaigns } from '@/lib/campaignStorage';
 import { getGoal, setGoal } from '@/lib/goalsStorage';
@@ -16,9 +15,12 @@ import { computeHealthScore, computePredictiveAlerts } from '@/lib/intelligenceE
 import { getProfile } from '@/lib/relationshipStorage';
 import { getMemory } from '@/lib/aiMemoryStorage';
 import { getActivities } from '@/lib/activityStorage';
+import { getCRMNote } from '@/lib/crmStorage';
+import { getSendLogs } from '@/lib/sendLogStorage';
 import QuickGenerateDrawer from '@/components/QuickGenerateDrawer';
 import type { CampaignRecord } from '@/lib/campaignStorage';
 import type { ActivityItem } from '@/lib/activityStorage';
+import type { SendLog } from '@/lib/sendLogStorage';
 import type { CustomerStats, CustomerGrade } from '@/lib/types';
 
 function HealthRing({ score, color, size = 52 }: { score: number; color: string; size?: number }) {
@@ -49,6 +51,13 @@ const OUTCOME_COLOR: Record<string, string> = {
 };
 const CHANNEL_LABEL: Record<string, string> = {
   linkedin: 'LinkedIn', kakao: '카카오톡', email: '이메일', cardnews: '카드뉴스', etc: '기타',
+  sms: 'SMS', lms: 'LMS', mms: 'MMS',
+};
+
+const STATUS_CONFIG: Record<string, { label: string; bg: string; color: string }> = {
+  sent:    { label: '발송됨', bg: '#F2F4F6', color: '#8B95A1' },
+  opened:  { label: '열람됨', bg: '#EFF6FF', color: '#2563EB' },
+  clicked: { label: '클릭됨', bg: '#F0FDF4', color: '#16A34A' },
 };
 
 function fmt(n: number) {
@@ -77,6 +86,7 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ name:
   const { data } = useDashboardData();
 
   const [campaigns, setCampaigns] = useState<CampaignRecord[]>([]);
+  const [sendLogs, setSendLogs] = useState<SendLog[]>([]);
   const [goal, setGoalState] = useState(0);
   const [goalInput, setGoalInput] = useState('');
   const [editingGoal, setEditingGoal] = useState(false);
@@ -85,14 +95,16 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ name:
   const [activities, setActivities] = useState<ActivityItem[]>([]);
   const [drawer, setDrawer] = useState<'message' | 'proposal' | null>(null);
   const [relProfile, setRelProfile] = useState<ReturnType<typeof getProfile>>(null);
-  const [aiMemory, setAiMemory] = useState<ReturnType<typeof getMemory>>(null);
-
-  const matcher = SLUG_MATCH[slug];
+  const [aiMemory, setAiMemory] = useState<Record<string, unknown> | null>(null);
+  const [crmNote, setCrmNote] = useState(() => getCRMNote(''));
 
   const customerName = useMemo(() => {
-    if (!data || !matcher) return '';
-    return data.customers.find(c => matcher(c)) ?? '';
-  }, [data, matcher]);
+    if (!data) return '';
+    const matcher = SLUG_MATCH[slug];
+    if (matcher) return data.customers.find(c => matcher(c)) ?? '';
+    const decoded = decodeURIComponent(slug);
+    return data.customers.find(c => c === decoded) ?? decoded;
+  }, [data, slug]);
 
   useEffect(() => {
     if (!customerName) return;
@@ -104,6 +116,8 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ name:
     setActivities(getActivities().filter(a => a.customer === customerName));
     setRelProfile(getProfile(customerName));
     setAiMemory(getMemory(customerName));
+    setCrmNote(getCRMNote(customerName));
+    getSendLogs(customerName).then(setSendLogs);
   }, [customerName]);
 
   const monthlyStats = useMemo(() => {
@@ -194,15 +208,6 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ name:
     setGoalState(amount);
     setEditingGoal(false);
   };
-
-  if (!matcher) {
-    return (
-      <main style={{ padding: 40, textAlign: 'center' }}>
-        <p style={{ color: '#8B95A1' }}>지원하지 않는 고객사입니다.</p>
-        <Link href="/" style={{ color: '#005957', fontSize: 14 }}>← 대시보드로</Link>
-      </main>
-    );
-  }
 
   if (!data) {
     return (
@@ -344,18 +349,18 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ name:
                 </div>
               )}
 
-              {relProfile && relProfile.keywords.length > 0 && (
+              {relProfile && (relProfile.keywords ?? []).length > 0 && (
                 <div>
                   <p style={{ fontSize: 11, color: '#8B95A1', fontWeight: 600, marginBottom: 6 }}>선호 키워드</p>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                    {relProfile.keywords.slice(0, 4).map((kw, i) => (
+                    {(relProfile.keywords ?? []).slice(0, 4).map((kw, i) => (
                       <span key={i} style={{ padding: '2px 8px', borderRadius: 10, fontSize: 11, background: '#E6F2F2', color: '#005957', fontWeight: 600 }}>{kw}</span>
                     ))}
                   </div>
                 </div>
               )}
 
-              {aiMemory && aiMemory.lastSummary && (
+              {aiMemory && typeof aiMemory.lastSummary === 'string' && (
                 <div style={{ padding: '8px 12px', borderRadius: 8, background: '#F8F9FA', border: '1px solid #F2F4F6' }}>
                   <p style={{ fontSize: 11, color: '#8B95A1', fontWeight: 600, marginBottom: 4 }}>AI 메모리</p>
                   <p style={{ fontSize: 12, color: '#191F28' }}>{aiMemory.lastSummary}</p>
@@ -501,6 +506,81 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ name:
         </div>
       </div>
 
+      {/* CRM 연락처 */}
+      {(crmNote.contacts?.length || crmNote.lastContact || crmNote.nextMeeting || crmNote.memo) ? (
+        <div className="card" style={{ marginBottom: 20, padding: '20px 24px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+            <p style={{ fontSize: 14, fontWeight: 700, color: '#191F28', display: 'flex', alignItems: 'center', gap: 6 }}>
+              <Phone style={{ width: 15, height: 15, color: '#005957' }} /> CRM 연락처
+            </p>
+            <Link href="/crm" style={{ fontSize: 12, color: '#005957', textDecoration: 'none', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 3 }}>
+              수정 <ChevronRight style={{ width: 12, height: 12 }} />
+            </Link>
+          </div>
+          <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap' }}>
+            {/* 담당자 목록 */}
+            {(crmNote.contacts ?? []).length > 0 && (
+              <div style={{ flex: 2, minWidth: 200 }}>
+                <p style={{ fontSize: 11, color: '#8B95A1', fontWeight: 600, marginBottom: 8 }}>담당자 연락처</p>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {(crmNote.contacts ?? []).map((c, i) => (
+                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', background: '#F8F9FA', borderRadius: 8 }}>
+                      <div style={{ width: 28, height: 28, borderRadius: '50%', background: '#E6F2F2', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                        <span style={{ fontSize: 11, fontWeight: 800, color: '#005957' }}>{c.name.slice(0, 1)}</span>
+                      </div>
+                      <div style={{ flex: 1 }}>
+                        <p style={{ fontSize: 13, fontWeight: 700, color: '#191F28' }}>{c.name}{c.role ? <span style={{ fontSize: 11, fontWeight: 500, color: '#8B95A1', marginLeft: 5 }}>{c.role}</span> : null}</p>
+                        {c.phone && <p style={{ fontSize: 12, color: '#4A5568', fontFamily: 'monospace' }}>{c.phone}</p>}
+                      </div>
+                      {c.phone && (
+                        <a href={`tel:${c.phone}`} style={{ padding: '5px 10px', borderRadius: 6, background: '#E6F2F2', color: '#005957', fontSize: 11, fontWeight: 700, textDecoration: 'none' }}>
+                          전화
+                        </a>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            {/* 날짜 + 메모 */}
+            <div style={{ flex: 1, minWidth: 160, display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {crmNote.lastContact && (
+                <div style={{ padding: '10px 14px', background: '#F8F9FA', borderRadius: 8 }}>
+                  <p style={{ fontSize: 11, color: '#8B95A1', fontWeight: 600, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <Calendar style={{ width: 11, height: 11 }} /> 최근 컨택
+                  </p>
+                  <p style={{ fontSize: 13, fontWeight: 700, color: '#191F28' }}>{crmNote.lastContact}</p>
+                </div>
+              )}
+              {crmNote.nextMeeting && (
+                <div style={{ padding: '10px 14px', background: '#EFF6FF', borderRadius: 8, border: '1px solid #BFDBFE' }}>
+                  <p style={{ fontSize: 11, color: '#2563EB', fontWeight: 600, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <Calendar style={{ width: 11, height: 11 }} /> 다음 미팅
+                  </p>
+                  <p style={{ fontSize: 13, fontWeight: 700, color: '#1E40AF' }}>{crmNote.nextMeeting}</p>
+                </div>
+              )}
+              {crmNote.memo && (
+                <div style={{ padding: '10px 14px', background: '#FFFBEB', borderRadius: 8, border: '1px solid #FDE68A' }}>
+                  <p style={{ fontSize: 11, color: '#B45309', fontWeight: 600, marginBottom: 4 }}>메모</p>
+                  <p style={{ fontSize: 12, color: '#374151', lineHeight: 1.6 }}>{crmNote.memo}</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="card" style={{ marginBottom: 20, padding: '16px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Phone style={{ width: 15, height: 15, color: '#D1D5DB' }} />
+            <span style={{ fontSize: 13, color: '#8B95A1' }}>CRM 정보가 없습니다</span>
+          </div>
+          <Link href="/crm" style={{ fontSize: 12, color: '#005957', textDecoration: 'none', fontWeight: 600 }}>
+            + 담당자 등록
+          </Link>
+        </div>
+      )}
+
       {/* 캠페인 히스토리 */}
       <div className="card" style={{ padding: '20px 24px' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
@@ -558,6 +638,77 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ name:
           }}>
             {showAllCampaigns ? '접기' : `전체 ${campaigns.length}건 보기`}
           </button>
+        )}
+      </div>
+
+      {/* 발송 이력 (Supabase send logs) */}
+      <div className="card" style={{ padding: '20px 24px', marginTop: 20 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+          <p style={{ fontSize: 14, fontWeight: 700, color: '#191F28', display: 'flex', alignItems: 'center', gap: 6 }}>
+            <Send style={{ width: 15, height: 15, color: '#005957' }} /> 발송 이력
+            {sendLogs.length > 0 && (
+              <span style={{ padding: '2px 8px', borderRadius: 10, fontSize: 11, fontWeight: 700, background: '#E6F2F2', color: '#005957' }}>{sendLogs.length}건</span>
+            )}
+          </p>
+          <Link href="/history" style={{ fontSize: 12, color: '#005957', textDecoration: 'none', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 3 }}>
+            전체 보기 <ChevronRight style={{ width: 12, height: 12 }} />
+          </Link>
+        </div>
+
+        {sendLogs.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '28px 0', color: '#8B95A1', fontSize: 13 }}>
+            발송 이력이 없습니다.
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column' }}>
+            {sendLogs.slice(0, 10).map((log, i) => {
+              const status = STATUS_CONFIG[log.status] ?? STATUS_CONFIG.sent;
+              const sentDate = new Date(log.sent_at);
+              const dateStr = `${sentDate.getFullYear()}-${String(sentDate.getMonth() + 1).padStart(2, '0')}-${String(sentDate.getDate()).padStart(2, '0')} ${String(sentDate.getHours()).padStart(2, '0')}:${String(sentDate.getMinutes()).padStart(2, '0')}`;
+              return (
+                <div key={log.id} style={{
+                  display: 'flex', alignItems: 'flex-start', gap: 14,
+                  padding: '11px 0',
+                  borderBottom: i < Math.min(sendLogs.length, 10) - 1 ? '1px solid #F2F4F6' : 'none',
+                }}>
+                  <div style={{ paddingTop: 3 }}>
+                    <div style={{ width: 8, height: 8, borderRadius: '50%', background: log.status === 'clicked' ? '#16A34A' : log.status === 'opened' ? '#2563EB' : '#D1D5DB' }} />
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap', marginBottom: 3 }}>
+                      <span style={{ fontSize: 11, color: '#8B95A1' }}>{dateStr}</span>
+                      <span style={{ padding: '2px 7px', borderRadius: 10, fontSize: 11, fontWeight: 700, background: '#F2F4F6', color: '#8B95A1' }}>
+                        {CHANNEL_LABEL[log.channel] ?? log.channel.toUpperCase()}
+                      </span>
+                      <span style={{ padding: '2px 7px', borderRadius: 10, fontSize: 11, fontWeight: 700, background: status.bg, color: status.color }}>
+                        {status.label}
+                      </span>
+                    </div>
+                    <p style={{ fontSize: 13, color: '#191F28', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
+                      {log.content_preview || '(내용 없음)'}
+                    </p>
+                    {log.receipt_num && (
+                      <p style={{ fontSize: 11, color: '#C0C9D4', marginTop: 2, fontFamily: 'monospace' }}>접수번호 {log.receipt_num}</p>
+                    )}
+                  </div>
+                  {log.open_at && (
+                    <div style={{ flexShrink: 0, textAlign: 'right' }}>
+                      <p style={{ fontSize: 10, color: '#8B95A1' }}>열람</p>
+                      <p style={{ fontSize: 11, color: '#2563EB', fontWeight: 600 }}>
+                        {new Date(log.open_at).toLocaleDateString('ko-KR', { month: 'numeric', day: 'numeric' })}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {sendLogs.length > 10 && (
+          <p style={{ fontSize: 12, color: '#8B95A1', textAlign: 'center', marginTop: 10 }}>
+            최근 10건 표시 · <Link href="/history" style={{ color: '#005957', textDecoration: 'none', fontWeight: 600 }}>전체 {sendLogs.length}건 보기</Link>
+          </p>
         )}
       </div>
 
