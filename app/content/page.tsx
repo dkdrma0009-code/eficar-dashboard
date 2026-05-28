@@ -335,6 +335,8 @@ export default function ContentPage() {
   const [version, setVersion] = useState(0);
   const [copied, setCopied] = useState(false);
   const [recipientEmail, setRecipientEmail] = useState('');
+  const [emailSendingDirect, setEmailSendingDirect] = useState(false);
+  const [emailDirectResult, setEmailDirectResult] = useState('');
   const [sendFeedback, setSendFeedback] = useState('');
   const [savedToLib, setSavedToLib] = useState(false);
   const [aiMode, setAiMode] = useState(false);
@@ -827,6 +829,33 @@ export default function ContentPage() {
     logToCampaign('email');
     if (emailTrackEnabled) registerEmailTrackLog();
     showFeedback('📧 메일 앱이 열렸습니다. 캘린더 · 캠페인에 자동 기록됐습니다.');
+  };
+
+  const sendEmailDirect = async () => {
+    if (!recipientEmail || !activeText) return;
+    setEmailSendingDirect(true);
+    setEmailDirectResult('');
+    const subject = contentType === 'email' ? parseEmailSubject(activeText) : `[에픽카] ${contentData?.customer ?? ''} 파트너십 안내`;
+    const text    = contentType === 'email' ? parseEmailBody(activeText) : activeText;
+    const trackPixelUrl = emailTrackEnabled ? buildTrackingPixelUrl(emailTrackId) : undefined;
+    try {
+      const res = await fetch('/api/email/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ to: recipientEmail, subject, text, trackPixelUrl }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error);
+      setEmailDirectResult('✅ 발송 완료');
+      logToCalendar('email');
+      logToCampaign('email');
+      if (emailTrackEnabled) registerEmailTrackLog();
+      showFeedback('📧 이메일이 발송됐습니다. 캘린더 · 캠페인에 자동 기록됐습니다.');
+    } catch (e) {
+      setEmailDirectResult(`❌ ${e instanceof Error ? e.message : '발송 실패'}`);
+    } finally {
+      setEmailSendingDirect(false);
+    }
   };
 
   const sendKakao = () => {
@@ -1689,19 +1718,26 @@ export default function ContentPage() {
                     )}
                     {contentType === 'email' && (
                       <>
-                        <button onClick={sendGmail} style={{
-                          display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px',
-                          borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 700,
-                          background: '#EA4335', color: 'white', transition: 'all 0.15s',
-                        }}>
-                          <Mail style={{ width: 14, height: 14 }} /> Gmail로 작성
+                        <button
+                          onClick={sendEmailDirect}
+                          disabled={emailSendingDirect || !recipientEmail}
+                          style={{
+                            display: 'flex', alignItems: 'center', gap: 6, padding: '8px 18px',
+                            borderRadius: 8, border: 'none', cursor: (!recipientEmail || emailSendingDirect) ? 'not-allowed' : 'pointer',
+                            fontSize: 13, fontWeight: 700, transition: 'all 0.15s',
+                            background: emailDirectResult?.startsWith('✅') ? '#059669' : (!recipientEmail || emailSendingDirect) ? '#E2E8F0' : '#005957',
+                            color: (!recipientEmail || emailSendingDirect) ? '#8B95A1' : 'white',
+                          }}
+                        >
+                          <Send style={{ width: 14, height: 14 }} />
+                          {emailSendingDirect ? '발송 중...' : emailDirectResult?.startsWith('✅') ? '발송 완료 ✅' : '바로 발송'}
                         </button>
-                        <button onClick={sendMailto} style={{
-                          display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px',
-                          borderRadius: 8, border: '1px solid #F2F4F6', cursor: 'pointer', fontSize: 13, fontWeight: 700,
-                          background: 'white', color: '#191F28', transition: 'all 0.15s',
+                        <button onClick={sendGmail} style={{
+                          display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px',
+                          borderRadius: 8, border: '1px solid #F2F4F6', cursor: 'pointer', fontSize: 12, fontWeight: 600,
+                          background: 'white', color: '#8B95A1', transition: 'all 0.15s',
                         }}>
-                          <Mail style={{ width: 14, height: 14 }} /> 메일 앱으로
+                          <Mail style={{ width: 13, height: 13 }} /> Gmail
                         </button>
                       </>
                     )}

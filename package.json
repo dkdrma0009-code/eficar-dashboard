@@ -14,6 +14,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.95.1",
     "@supabase/supabase-js": "^2.105.4",
+    "@types/nodemailer": "^8.0.0",
     "clsx": "^2.1.0",
     "html2canvas": "^1.4.1",
     "jspdf": "^4.2.1",
@@ -21,12 +22,14 @@
     "lucide-react": "^0.344.0",
     "mammoth": "^1.12.0",
     "next": "^16.2.5",
+    "nodemailer": "^8.0.9",
     "pdf-parse": "^2.4.5",
     "popbill": "^1.64.0",
     "pptxgenjs": "^4.0.1",
     "react": "^18",
     "react-dom": "^18",
     "recharts": "^2.12.0",
+    "resend": "^6.12.4",
     "tailwind-merge": "^2.2.1",
     "xlsx": "^0.18.5"
   },
