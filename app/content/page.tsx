@@ -368,9 +368,15 @@ export default function ContentPage() {
   const [bulkProgress, setBulkProgress] = useState({ done: 0, total: 0, success: 0, fail: 0 });
   const [bulkDone, setBulkDone] = useState(false);
 
-  // 이메일 추적 픽셀
+  // 이메일 열람 추적 픽셀
   const [emailTrackId, setEmailTrackId] = useState<string>(() => generateLogId());
   const [emailTrackEnabled, setEmailTrackEnabled] = useState(false);
+
+  // SMS/카카오 클릭 추적
+  const [smsTrackId, setSmsTrackId] = useState<string>(() => generateLogId());
+  const [clickTrackEnabled, setClickTrackEnabled] = useState(false);
+  const [clickTargetUrl, setClickTargetUrl] = useState('https://eficar.co.kr');
+  const [clickUrlCopied, setClickUrlCopied] = useState(false);
 
   // LinkedIn 직접 게시 상태
   const [liToken, setLiToken] = useState<string>('');
@@ -608,12 +614,14 @@ export default function ContentPage() {
         setSmsFeedback(`✅ ${data.msgType} 발송 완료`);
         logToCampaign('etc');
         addSendLog({
+          id: clickTrackEnabled ? smsTrackId : undefined,
           channel: (data.msgType as string).toLowerCase() as 'sms' | 'lms' | 'mms',
           customer: contentData?.customer ?? '',
           receiver_masked: smsPhone.slice(-4).padStart(smsPhone.length, '*'),
           content_preview: activeText.slice(0, 40),
           receipt_num: data.receiptNum,
         });
+        if (clickTrackEnabled) setSmsTrackId(generateLogId());
       }
     } catch (e) {
       setSmsFeedback(`❌ ${String(e)}`);
@@ -706,12 +714,14 @@ export default function ContentPage() {
         logToCalendar('kakao');
         logToCampaign('kakao');
         addSendLog({
+          id: clickTrackEnabled ? smsTrackId : undefined,
           channel: 'kakao',
           customer: contentData?.customer ?? '',
           receiver_masked: smsPhone.slice(-4).padStart(smsPhone.length, '*'),
           content_preview: activeText.slice(0, 40),
           receipt_num: data.receiptNum,
         });
+        if (clickTrackEnabled) setSmsTrackId(generateLogId());
       }
     } catch (e) {
       setKakaoFeedback(`❌ ${String(e)}`);
@@ -912,6 +922,52 @@ export default function ContentPage() {
             </button>
           </div>
           {smsFeedback && <p style={{ fontSize: 12, fontWeight: 600, color: smsFeedback.startsWith('✅') ? '#00B386' : '#EF4444', marginTop: 5 }}>{smsFeedback}</p>}
+        </div>
+
+        {/* 클릭 추적 URL */}
+        <div style={{ padding: '10px 12px', background: '#F8F9FA', borderRadius: 8, border: '1px solid #E2E8F0' }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', userSelect: 'none' }}>
+            <input type="checkbox" checked={clickTrackEnabled} onChange={e => {
+              setClickTrackEnabled(e.target.checked);
+              if (e.target.checked) setSmsTrackId(generateLogId());
+              setClickUrlCopied(false);
+            }} style={{ accentColor: '#005957', width: 14, height: 14 }} />
+            <span style={{ fontSize: 12, fontWeight: 600, color: clickTrackEnabled ? '#005957' : '#8B95A1' }}>클릭 추적 URL 사용</span>
+          </label>
+          {clickTrackEnabled && (
+            <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <div>
+                <p style={{ fontSize: 11, color: '#8B95A1', fontWeight: 600, marginBottom: 4 }}>이동할 URL</p>
+                <input
+                  value={clickTargetUrl}
+                  onChange={e => { setClickTargetUrl(e.target.value); setClickUrlCopied(false); }}
+                  placeholder="https://eficar.co.kr/..."
+                  style={{ width: '100%', padding: '7px 10px', border: '1px solid #A7F3D0', borderRadius: 7, fontSize: 13, fontFamily: 'inherit', background: 'white' }}
+                />
+              </div>
+              <div style={{ padding: '8px 10px', background: '#F0FDF9', borderRadius: 7, border: '1px solid #A7F3D0' }}>
+                <p style={{ fontSize: 11, color: '#005957', fontWeight: 700, marginBottom: 6 }}>📡 추적 URL (메시지에 삽입)</p>
+                <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                  <code style={{ fontSize: 10, color: '#374151', background: 'white', padding: '4px 6px', borderRadius: 4, border: '1px solid #E5E7EB', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {buildClickTrackUrl(smsTrackId, clickTargetUrl)}
+                  </code>
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(buildClickTrackUrl(smsTrackId, clickTargetUrl));
+                      setClickUrlCopied(true);
+                      setTimeout(() => setClickUrlCopied(false), 2000);
+                    }}
+                    style={{ padding: '4px 10px', borderRadius: 6, border: `1px solid ${clickUrlCopied ? '#16A34A' : '#005957'}`, background: clickUrlCopied ? '#F0FDF4' : 'white', color: clickUrlCopied ? '#16A34A' : '#005957', fontSize: 11, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}
+                  >
+                    {clickUrlCopied ? '✅ 복사됨' : '복사'}
+                  </button>
+                </div>
+                <p style={{ fontSize: 10, color: '#8B95A1', marginTop: 5 }}>
+                  이 URL을 메시지 본문에 붙여넣고 발송하면 클릭 시 자동 기록됩니다.
+                </p>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* 수신번호 일괄 등록 */}
@@ -1350,6 +1406,44 @@ export default function ContentPage() {
                               복사 + 추적 등록
                             </button>
                           </div>
+                        </div>
+                      )}
+                      {/* 이메일 링크 클릭 추적 */}
+                      <label style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8, cursor: 'pointer', userSelect: 'none' }}>
+                        <input type="checkbox" checked={clickTrackEnabled} onChange={e => {
+                          setClickTrackEnabled(e.target.checked);
+                          if (e.target.checked) setSmsTrackId(generateLogId());
+                          setClickUrlCopied(false);
+                        }} style={{ accentColor: '#005957', width: 14, height: 14 }} />
+                        <span style={{ fontSize: 12, fontWeight: 600, color: clickTrackEnabled ? '#005957' : '#8B95A1' }}>링크 클릭 추적 포함</span>
+                      </label>
+                      {clickTrackEnabled && (
+                        <div style={{ marginTop: 6, padding: '10px 12px', background: '#F0FDF9', borderRadius: 7, border: '1px solid #A7F3D0' }}>
+                          <p style={{ fontSize: 11, color: '#005957', fontWeight: 700, marginBottom: 6 }}>🔗 클릭 추적 URL</p>
+                          <div style={{ marginBottom: 6 }}>
+                            <input
+                              value={clickTargetUrl}
+                              onChange={e => { setClickTargetUrl(e.target.value); setClickUrlCopied(false); }}
+                              placeholder="https://eficar.co.kr/..."
+                              style={{ width: '100%', padding: '6px 8px', border: '1px solid #A7F3D0', borderRadius: 6, fontSize: 12, fontFamily: 'inherit', background: 'white' }}
+                            />
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <code style={{ fontSize: 10, color: '#374151', background: 'white', padding: '4px 6px', borderRadius: 4, border: '1px solid #E5E7EB', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {buildClickTrackUrl(smsTrackId, clickTargetUrl)}
+                            </code>
+                            <button
+                              onClick={() => {
+                                navigator.clipboard.writeText(buildClickTrackUrl(smsTrackId, clickTargetUrl));
+                                setClickUrlCopied(true);
+                                setTimeout(() => setClickUrlCopied(false), 2000);
+                              }}
+                              style={{ padding: '4px 10px', borderRadius: 6, border: `1px solid ${clickUrlCopied ? '#16A34A' : '#005957'}`, background: clickUrlCopied ? '#F0FDF4' : 'white', color: clickUrlCopied ? '#16A34A' : '#005957', fontSize: 11, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}
+                            >
+                              {clickUrlCopied ? '✅ 복사됨' : '복사'}
+                            </button>
+                          </div>
+                          <p style={{ fontSize: 10, color: '#8B95A1', marginTop: 4 }}>이 URL을 이메일 본문 링크에 삽입하세요.</p>
                         </div>
                       )}
                     </div>
