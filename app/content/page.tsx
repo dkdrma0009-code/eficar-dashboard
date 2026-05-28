@@ -381,6 +381,11 @@ export default function ContentPage() {
   const [clickUrlCopied, setClickUrlCopied] = useState(false);
   const [ctaButtonLabel, setCtaButtonLabel] = useState('자세히 보기');
 
+  // 이메일 CTA 박스
+  const [ctaBoxEnabled, setCtaBoxEnabled] = useState(true);
+  const [ctaBoxLabel, setCtaBoxLabel] = useState('에픽카 바로가기');
+  const [ctaBoxUrl, setCtaBoxUrl] = useState('https://eficar.co.kr');
+
   // LinkedIn 직접 게시 상태
   const [liToken, setLiToken] = useState<string>('');
   const [liPersonId, setLiPersonId] = useState<string>('');
@@ -842,7 +847,14 @@ export default function ContentPage() {
       const res = await fetch('/api/email/send', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ to: recipientEmail, subject, text, trackPixelUrl }),
+        body: JSON.stringify({
+          to: recipientEmail,
+          subject,
+          text,
+          trackPixelUrl,
+          ctaLabel: ctaBoxEnabled ? ctaBoxLabel : undefined,
+          ctaUrl: ctaBoxEnabled ? ctaBoxUrl : undefined,
+        }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error);
@@ -1399,6 +1411,37 @@ export default function ContentPage() {
                   {/* 이메일/카카오 수신자 입력 */}
                   {(contentType === 'email') && (
                     <div style={{ marginBottom: 10 }}>
+                      {/* CTA 박스 설정 */}
+                      <div style={{ marginBottom: 12, padding: '12px 14px', background: '#F8F9FA', borderRadius: 8, border: '1px solid #E2E8F0' }}>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: ctaBoxEnabled ? 10 : 0, cursor: 'pointer', userSelect: 'none' }}>
+                          <input type="checkbox" checked={ctaBoxEnabled} onChange={e => setCtaBoxEnabled(e.target.checked)}
+                            style={{ accentColor: '#005957', width: 14, height: 14 }} />
+                          <span style={{ fontSize: 12, fontWeight: 600, color: ctaBoxEnabled ? '#005957' : '#8B95A1' }}>CTA 버튼 박스 포함</span>
+                        </label>
+                        {ctaBoxEnabled && (
+                          <>
+                            <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+                              <div style={{ flex: 1 }}>
+                                <p style={{ fontSize: 10, color: '#8B95A1', fontWeight: 600, marginBottom: 3 }}>버튼 텍스트</p>
+                                <input value={ctaBoxLabel} onChange={e => setCtaBoxLabel(e.target.value)}
+                                  placeholder="에픽카 바로가기"
+                                  style={{ width: '100%', padding: '6px 8px', border: '1px solid #E2E8F0', borderRadius: 6, fontSize: 12, fontFamily: 'inherit', background: 'white' }} />
+                              </div>
+                              <div style={{ flex: 2 }}>
+                                <p style={{ fontSize: 10, color: '#8B95A1', fontWeight: 600, marginBottom: 3 }}>이동할 URL</p>
+                                <input value={ctaBoxUrl} onChange={e => setCtaBoxUrl(e.target.value)}
+                                  placeholder="https://eficar.co.kr"
+                                  style={{ width: '100%', padding: '6px 8px', border: '1px solid #E2E8F0', borderRadius: 6, fontSize: 12, fontFamily: 'inherit', background: 'white' }} />
+                              </div>
+                            </div>
+                            {/* 미리보기 */}
+                            <div style={{ background: '#1A2332', borderRadius: 8, padding: '14px 18px' }}>
+                              <p style={{ fontSize: 14, fontWeight: 700, color: 'white', margin: 0 }}>{ctaBoxLabel || '에픽카 바로가기'}</p>
+                              <p style={{ fontSize: 11, color: '#94A3B8', margin: '3px 0 0' }}>클릭하여 이동하기 →</p>
+                            </div>
+                          </>
+                        )}
+                      </div>
                       <p style={{ fontSize: 11, color: '#8B95A1', marginBottom: 5, fontWeight: 600 }}>수신자 이메일 (선택)</p>
                       <input
                         type="email" value={recipientEmail} onChange={e => setRecipientEmail(e.target.value)}
