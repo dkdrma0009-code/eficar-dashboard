@@ -324,6 +324,46 @@ export default function HistoryPage() {
         </div>
       )}
 
+      {/* 고객사별 성과 */}
+      {logs.length > 0 && (() => {
+        const m: Record<string, { sends: number; opens: number; clicks: number }> = {};
+        filtered.forEach(l => {
+          const k = l.customer || '(미지정)';
+          if (!m[k]) m[k] = { sends: 0, opens: 0, clicks: 0 };
+          m[k].sends++;
+          if (l.open_at)  m[k].opens++;
+          if (l.click_at) m[k].clicks++;
+        });
+        const rows = Object.entries(m)
+          .map(([customer, v]) => ({ customer, ...v, openRate: v.sends ? (v.opens / v.sends * 100) : 0 }))
+          .sort((a, b) => b.sends - a.sends);
+        if (!rows.length) return null;
+        return (
+          <div style={{ background: 'white', border: '1px solid #F2F4F6', borderRadius: 12, marginBottom: 20, overflow: 'hidden' }}>
+            <div style={{ padding: '14px 20px', borderBottom: '1px solid #F2F4F6', display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 14, fontWeight: 700, color: '#191F28' }}>고객사별 성과</span>
+              <span style={{ fontSize: 12, color: '#8B95A1' }}>열람률 높을수록 참여도 높음</span>
+            </div>
+            <div style={{ padding: '12px 20px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {rows.map(r => (
+                <div key={r.customer} style={{ display: 'grid', gridTemplateColumns: '160px 60px 60px 60px 1fr', alignItems: 'center', gap: 12 }}>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: '#191F28', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.customer}</span>
+                  <span style={{ fontSize: 12, color: '#8B95A1', textAlign: 'right' }}>발송 {r.sends}</span>
+                  <span style={{ fontSize: 12, color: '#2563EB', textAlign: 'right' }}>열람 {r.opens}</span>
+                  <span style={{ fontSize: 12, color: '#16A34A', textAlign: 'right' }}>클릭 {r.clicks}</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <div style={{ flex: 1, height: 6, background: '#F2F4F6', borderRadius: 3, overflow: 'hidden' }}>
+                      <div style={{ height: '100%', background: r.openRate >= 30 ? '#16A34A' : r.openRate >= 10 ? '#2563EB' : '#8B95A1', borderRadius: 3, width: `${Math.min(r.openRate, 100)}%`, transition: 'width 0.4s' }} />
+                    </div>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: r.openRate >= 30 ? '#16A34A' : r.openRate >= 10 ? '#2563EB' : '#8B95A1', minWidth: 36 }}>{r.openRate.toFixed(0)}%</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
+
       {/* 채널별 현황 배지 */}
       {(() => {
         const channelCounts: Record<string, number> = {};

@@ -1,55 +1,68 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
-import { Plus, X, Check, Phone, Mail, User, Calendar, StickyNote, ChevronDown, ChevronUp } from 'lucide-react';
+import { useState, useEffect, useMemo, useRef } from 'react';
+import { Plus, X, Check, Phone, Mail, User, Calendar, StickyNote, ChevronDown, ChevronUp, FileSpreadsheet, Download, Upload } from 'lucide-react';
 import { getAllCRM, getCRMNote, setCRMNote, type CRMNote, type ContactPerson } from '@/lib/crmStorage';
 import { useDashboardData } from '@/lib/DataContext';
+import * as XLSX from 'xlsx';
 
-const EMPTY_CONTACT: ContactPerson = { name: '', phone: '', role: '' };
+const EMPTY_CONTACT: ContactPerson = { name: '', phone: '', role: '', email: '' };
 
 function ContactCard({
-  contact, index, onChange, onDelete,
+  contact, onChange, onDelete,
 }: {
   contact: ContactPerson;
-  index: number;
   onChange: (c: ContactPerson) => void;
   onDelete: () => void;
 }) {
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr auto', gap: 8, alignItems: 'center', padding: '10px 12px', background: '#F8F9FA', borderRadius: 8, border: '1px solid #F2F4F6' }}>
-      <div>
-        <p style={{ fontSize: 10, color: '#8B95A1', fontWeight: 600, marginBottom: 3 }}>이름</p>
-        <input
-          value={contact.name}
-          onChange={e => onChange({ ...contact, name: e.target.value })}
-          placeholder="홍길동"
-          style={{ width: '100%', padding: '6px 8px', border: '1px solid #E2E8F0', borderRadius: 6, fontSize: 13, fontFamily: 'inherit' }}
-        />
+    <div style={{ padding: '10px 12px', background: '#F8F9FA', borderRadius: 8, border: '1px solid #F2F4F6' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
+        <div>
+          <p style={{ fontSize: 10, color: '#8B95A1', fontWeight: 600, marginBottom: 3 }}>이름</p>
+          <input
+            value={contact.name}
+            onChange={e => onChange({ ...contact, name: e.target.value })}
+            placeholder="홍길동"
+            style={{ width: '100%', padding: '6px 8px', border: '1px solid #E2E8F0', borderRadius: 6, fontSize: 13, fontFamily: 'inherit', boxSizing: 'border-box' }}
+          />
+        </div>
+        <div>
+          <p style={{ fontSize: 10, color: '#8B95A1', fontWeight: 600, marginBottom: 3 }}>직책</p>
+          <input
+            value={contact.role ?? ''}
+            onChange={e => onChange({ ...contact, role: e.target.value })}
+            placeholder="구매담당자"
+            style={{ width: '100%', padding: '6px 8px', border: '1px solid #E2E8F0', borderRadius: 6, fontSize: 13, fontFamily: 'inherit', boxSizing: 'border-box' }}
+          />
+        </div>
       </div>
-      <div>
-        <p style={{ fontSize: 10, color: '#8B95A1', fontWeight: 600, marginBottom: 3 }}>전화번호</p>
-        <input
-          value={contact.phone}
-          onChange={e => onChange({ ...contact, phone: e.target.value.replace(/[^0-9-]/g, '') })}
-          placeholder="01012345678"
-          style={{ width: '100%', padding: '6px 8px', border: '1px solid #E2E8F0', borderRadius: 6, fontSize: 13, fontFamily: 'monospace' }}
-        />
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: 8, alignItems: 'flex-end' }}>
+        <div>
+          <p style={{ fontSize: 10, color: '#8B95A1', fontWeight: 600, marginBottom: 3 }}>전화번호</p>
+          <input
+            value={contact.phone}
+            onChange={e => onChange({ ...contact, phone: e.target.value.replace(/[^0-9-]/g, '') })}
+            placeholder="01012345678"
+            style={{ width: '100%', padding: '6px 8px', border: '1px solid #E2E8F0', borderRadius: 6, fontSize: 13, fontFamily: 'monospace', boxSizing: 'border-box' }}
+          />
+        </div>
+        <div>
+          <p style={{ fontSize: 10, color: '#8B95A1', fontWeight: 600, marginBottom: 3 }}>이메일</p>
+          <input
+            value={contact.email ?? ''}
+            onChange={e => onChange({ ...contact, email: e.target.value })}
+            placeholder="hong@company.com"
+            style={{ width: '100%', padding: '6px 8px', border: '1px solid #E2E8F0', borderRadius: 6, fontSize: 12, fontFamily: 'inherit', boxSizing: 'border-box' }}
+          />
+        </div>
+        <button
+          onClick={onDelete}
+          style={{ padding: 6, borderRadius: 6, border: 'none', background: 'none', color: '#F04452', cursor: 'pointer', display: 'flex', marginBottom: 1 }}
+        >
+          <X style={{ width: 14, height: 14 }} />
+        </button>
       </div>
-      <div>
-        <p style={{ fontSize: 10, color: '#8B95A1', fontWeight: 600, marginBottom: 3 }}>직책</p>
-        <input
-          value={contact.role ?? ''}
-          onChange={e => onChange({ ...contact, role: e.target.value })}
-          placeholder="구매담당자"
-          style={{ width: '100%', padding: '6px 8px', border: '1px solid #E2E8F0', borderRadius: 6, fontSize: 13, fontFamily: 'inherit' }}
-        />
-      </div>
-      <button
-        onClick={onDelete}
-        style={{ padding: 6, borderRadius: 6, border: 'none', background: 'none', color: '#F04452', cursor: 'pointer', display: 'flex', alignSelf: 'flex-end', marginBottom: 2 }}
-      >
-        <X style={{ width: 14, height: 14 }} />
-      </button>
     </div>
   );
 }
@@ -76,7 +89,6 @@ function CustomerCRMCard({ customerName, onSaved }: { customerName: string; onSa
 
   return (
     <div style={{ background: 'white', border: '1px solid #F2F4F6', borderRadius: 12, overflow: 'hidden' }}>
-      {/* 헤더 */}
       <div
         onClick={() => setOpen(v => !v)}
         style={{ padding: '14px 20px', display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer', userSelect: 'none' }}
@@ -103,10 +115,8 @@ function CustomerCRMCard({ customerName, onSaved }: { customerName: string; onSa
           : <ChevronDown style={{ width: 16, height: 16, color: '#8B95A1' }} />}
       </div>
 
-      {/* 펼쳐지는 편집 영역 */}
       {open && (
         <div style={{ borderTop: '1px solid #F2F4F6', padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 16 }}>
-          {/* 담당자 목록 */}
           <div>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
               <p style={{ fontSize: 12, fontWeight: 700, color: '#4A5568', display: 'flex', alignItems: 'center', gap: 5 }}>
@@ -121,15 +131,14 @@ function CustomerCRMCard({ customerName, onSaved }: { customerName: string; onSa
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               {(note.contacts ?? []).map((c, i) => (
-                <ContactCard key={i} contact={c} index={i} onChange={u => updateContact(i, u)} onDelete={() => deleteContact(i)} />
+                <ContactCard key={i} contact={c} onChange={u => updateContact(i, u)} onDelete={() => deleteContact(i)} />
               ))}
               {(note.contacts ?? []).length === 0 && (
-                <p style={{ fontSize: 12, color: '#B0B8C1', textAlign: 'center', padding: '12px 0' }}>담당자를 추가하면 SMS/카카오 발송 시 자동으로 불러옵니다</p>
+                <p style={{ fontSize: 12, color: '#B0B8C1', textAlign: 'center', padding: '12px 0' }}>담당자를 추가하면 SMS/이메일 발송 시 자동으로 불러옵니다</p>
               )}
             </div>
           </div>
 
-          {/* 날짜 필드 */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             <div>
               <p style={{ fontSize: 12, fontWeight: 700, color: '#4A5568', display: 'flex', alignItems: 'center', gap: 5, marginBottom: 6 }}>
@@ -155,7 +164,6 @@ function CustomerCRMCard({ customerName, onSaved }: { customerName: string; onSa
             </div>
           </div>
 
-          {/* 메모 */}
           <div>
             <p style={{ fontSize: 12, fontWeight: 700, color: '#4A5568', display: 'flex', alignItems: 'center', gap: 5, marginBottom: 6 }}>
               <StickyNote style={{ width: 12, height: 12 }} /> 메모
@@ -169,7 +177,6 @@ function CustomerCRMCard({ customerName, onSaved }: { customerName: string; onSa
             />
           </div>
 
-          {/* 저장 */}
           <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
             <button
               onClick={save}
@@ -190,6 +197,8 @@ export default function CRMPage() {
   const [allCRM, setAllCRM] = useState<Record<string, CRMNote>>({});
   const [search, setSearch] = useState('');
   const [rev, setRev] = useState(0);
+  const [importResult, setImportResult] = useState<{ customers: number; contacts: number } | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => { setAllCRM(getAllCRM()); }, [rev]);
 
@@ -217,16 +226,109 @@ export default function CRMPage() {
       .slice(0, 3);
   }, [allCRM]);
 
+  const downloadTemplate = () => {
+    const ws = XLSX.utils.aoa_to_sheet([
+      ['고객사', '이름', '전화번호', '직책', '이메일'],
+      ['SK렌터카', '홍길동', '01012345678', '구매담당자', 'hong@sk.com'],
+      ['롯데렌탈', '김영희', '01098765432', '팀장', 'kim@lotte.com'],
+    ]);
+    ws['!cols'] = [{ wch: 16 }, { wch: 10 }, { wch: 14 }, { wch: 12 }, { wch: 24 }];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, '담당자');
+    XLSX.writeFile(wb, 'CRM_담당자_템플릿.xlsx');
+  };
+
+  const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = '';
+
+    const reader = new FileReader();
+    reader.onload = ev => {
+      const wb = XLSX.read(ev.target?.result, { type: 'array' });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json<Record<string, string>>(ws, { defval: '' });
+
+      // 컬럼 매핑 (한글/영문 모두 허용)
+      const col = (row: Record<string, string>, ...keys: string[]) => {
+        for (const k of keys) {
+          const found = Object.keys(row).find(r => r.trim() === k);
+          if (found) return String(row[found] ?? '').trim();
+        }
+        return '';
+      };
+
+      // 고객사별로 그룹핑
+      const grouped: Record<string, ContactPerson[]> = {};
+      for (const row of rows) {
+        const customer = col(row, '고객사', 'customer', '회사');
+        if (!customer) continue;
+        const contact: ContactPerson = {
+          name:  col(row, '이름', 'name', '담당자명'),
+          phone: col(row, '전화번호', 'phone', '연락처', '핸드폰').replace(/[^0-9-]/g, ''),
+          role:  col(row, '직책', 'role', '직함', '부서'),
+          email: col(row, '이메일', 'email', 'Email', 'e-mail'),
+        };
+        if (!grouped[customer]) grouped[customer] = [];
+        grouped[customer].push(contact);
+      }
+
+      // 기존 CRM에 병합 (고객사가 있으면 담당자만 교체, 없으면 신규 추가)
+      let customerCount = 0;
+      let contactCount = 0;
+      for (const [customer, contacts] of Object.entries(grouped)) {
+        const existing = getCRMNote(customer);
+        setCRMNote(customer, { ...existing, contacts });
+        customerCount++;
+        contactCount += contacts.length;
+      }
+
+      setRev(r => r + 1);
+      setImportResult({ customers: customerCount, contacts: contactCount });
+      setTimeout(() => setImportResult(null), 5000);
+    };
+    reader.readAsArrayBuffer(file);
+  };
+
   return (
     <div style={{ maxWidth: 900, margin: '0 auto', padding: '28px 24px' }}>
       {/* 헤더 */}
-      <div style={{ marginBottom: 24 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-          <User style={{ width: 20, height: 20, color: '#005957' }} />
-          <h1 style={{ fontSize: 22, fontWeight: 800, color: '#1A2332', margin: 0 }}>CRM 연락처</h1>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 24 }}>
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+            <User style={{ width: 20, height: 20, color: '#005957' }} />
+            <h1 style={{ fontSize: 22, fontWeight: 800, color: '#1A2332', margin: 0 }}>CRM 연락처</h1>
+          </div>
+          <p style={{ fontSize: 13, color: '#8B95A1', margin: 0 }}>고객사별 담당자 연락처 · 미팅 일정 · 메모 관리</p>
         </div>
-        <p style={{ fontSize: 13, color: '#8B95A1', margin: 0 }}>고객사별 담당자 연락처 · 미팅 일정 · 메모 관리</p>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button
+            onClick={downloadTemplate}
+            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 8, border: '1px solid #E2E8F0', background: 'white', color: '#4A5568', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
+          >
+            <Download style={{ width: 13, height: 13 }} />
+            양식 다운로드
+          </button>
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 8, border: 'none', background: '#005957', color: 'white', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
+          >
+            <FileSpreadsheet style={{ width: 13, height: 13 }} />
+            엑셀로 가져오기
+          </button>
+          <input ref={fileInputRef} type="file" accept=".xlsx,.xls" style={{ display: 'none' }} onChange={handleImport} />
+        </div>
       </div>
+
+      {/* 가져오기 결과 */}
+      {importResult && (
+        <div style={{ marginBottom: 16, padding: '12px 16px', background: '#F0FDF4', border: '1px solid #BBF7D0', borderRadius: 10, display: 'flex', alignItems: 'center', gap: 8 }}>
+          <Check style={{ width: 15, height: 15, color: '#16A34A', flexShrink: 0 }} />
+          <span style={{ fontSize: 13, fontWeight: 600, color: '#15803D' }}>
+            가져오기 완료 — 고객사 {importResult.customers}곳, 담당자 {importResult.contacts}명
+          </span>
+        </div>
+      )}
 
       {/* 요약 카드 */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 24 }}>
@@ -255,6 +357,14 @@ export default function CRMPage() {
         </div>
       )}
 
+      {/* 엑셀 양식 안내 */}
+      <div style={{ marginBottom: 16, padding: '10px 14px', background: '#F8F9FA', border: '1px solid #E2E8F0', borderRadius: 8 }}>
+        <p style={{ fontSize: 12, color: '#8B95A1', margin: 0 }}>
+          📋 엑셀 열 순서: <strong style={{ color: '#4A5568' }}>고객사 · 이름 · 전화번호 · 직책 · 이메일</strong>
+          &nbsp;— 열 순서가 달라도 됩니다. 양식 다운로드로 샘플을 받아보세요.
+        </p>
+      </div>
+
       {/* 검색 */}
       <div style={{ marginBottom: 16 }}>
         <input
@@ -272,7 +382,7 @@ export default function CRMPage() {
         <div style={{ textAlign: 'center', padding: '60px 0', color: '#8B95A1' }}>
           <p style={{ fontSize: 32, marginBottom: 12 }}>👤</p>
           <p style={{ fontSize: 14, fontWeight: 600 }}>고객사가 없습니다</p>
-          <p style={{ fontSize: 12, marginTop: 4 }}>대시보드에서 데이터를 업로드하면 고객사 목록이 자동으로 생성됩니다</p>
+          <p style={{ fontSize: 12, marginTop: 4 }}>엑셀로 가져오기를 사용하거나, 대시보드에서 데이터를 업로드하면 목록이 자동으로 생성됩니다</p>
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>

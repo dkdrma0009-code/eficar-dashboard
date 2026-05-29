@@ -9,7 +9,7 @@ import { useMemo, useEffect, useState } from 'react';
 import {
   Zap, LayoutDashboard, Users, FileText, Sparkles,
   Image, BarChart2, Send, Calendar, BookOpen,
-  GitCompare, Upload, Newspaper, History, Contact, Bell,
+  GitCompare, Upload, Newspaper, History, Contact, Bell, Clock,
 } from 'lucide-react';
 
 const SECTIONS = [
@@ -36,6 +36,7 @@ const SECTIONS = [
     items: [
       { href: '/campaigns', label: '캠페인',        icon: Send },
       { href: '/history',   label: '발송 이력',     icon: History },
+      { href: '/schedule',  label: '예약 발송',     icon: Clock },
       { href: '/crm',       label: 'CRM 연락처',    icon: Contact },
       { href: '/calendar',  label: '콘텐츠 캘린더', icon: Calendar },
       { href: '/library',   label: '라이브러리',    icon: BookOpen },

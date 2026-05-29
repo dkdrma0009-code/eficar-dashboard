@@ -1,6 +1,7 @@
 'use client';
 import { useState, useMemo, useEffect } from 'react';
-import { Sparkles, Copy, Check, AlertTriangle, TrendingUp, TrendingDown, FileText, Pencil, X, Brain, ExternalLink, BookOpen } from 'lucide-react';
+import { Sparkles, Copy, Check, AlertTriangle, TrendingUp, TrendingDown, FileText, Pencil, X, Brain, ExternalLink, BookOpen, Mail, Send } from 'lucide-react';
+import jsPDF from 'jspdf';
 import { useDashboardData } from '@/lib/DataContext';
 import { getCampaigns } from '@/lib/campaignStorage';
 import { categorizeProduct } from '@/lib/dataUtils';
@@ -35,6 +36,9 @@ export default function ProposalPage() {
   const [notionSaving, setNotionSaving] = useState(false);
   const [notionUrl, setNotionUrl] = useState('');
   const [notionError, setNotionError] = useState('');
+  const [pdfRecipient, setPdfRecipient] = useState('');
+  const [pdfSending, setPdfSending] = useState(false);
+  const [pdfResult, setPdfResult] = useState('');
 
   const customers = useMemo(() => {
     if (!data) return [];
@@ -141,6 +145,121 @@ export default function ProposalPage() {
       setNotionError(e instanceof Error ? e.message : 'Notion 저장 실패');
     } finally {
       setNotionSaving(false);
+    }
+  };
+
+  const sendAsPdf = async () => {
+    if (!draft || !pdfRecipient) return;
+    setPdfSending(true);
+    setPdfResult('');
+    try {
+      const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+      const W = doc.internal.pageSize.getWidth();
+      const margin = 20;
+      const maxW = W - margin * 2;
+      let y = margin;
+
+      const addLine = (text: string, opts: { size?: number; bold?: boolean; color?: [number,number,number]; gap?: number } = {}) => {
+        const { size = 11, bold = false, color = [30, 30, 50], gap = 6 } = opts;
+        doc.setFontSize(size);
+        doc.setFont('helvetica', bold ? 'bold' : 'normal');
+        doc.setTextColor(...color);
+        const lines = doc.splitTextToSize(text, maxW) as string[];
+        lines.forEach((line: string) => {
+          if (y > 270) { doc.addPage(); y = margin; }
+          doc.text(line, margin, y);
+          y += size * 0.45;
+        });
+        y += gap;
+      };
+
+      const addSection = (title: string) => {
+        if (y > 250) { doc.addPage(); y = margin; }
+        y += 4;
+        doc.setFillColor(0, 89, 87);
+        doc.rect(margin, y, maxW, 7, 'F');
+        doc.setFontSize(10); doc.setFont('helvetica', 'bold');
+        doc.setTextColor(255, 255, 255);
+        doc.text(title, margin + 3, y + 5);
+        y += 12;
+      };
+
+      // 헤더
+      doc.setFillColor(0, 89, 87);
+      doc.rect(0, 0, W, 28, 'F');
+      doc.setFontSize(18); doc.setFont('helvetica', 'bold');
+      doc.setTextColor(255, 255, 255);
+      doc.text('EFICAR', margin, 16);
+      doc.setFontSize(9); doc.setFont('helvetica', 'normal');
+      doc.text('AI Marketing System', margin, 22);
+      doc.setFontSize(10);
+      doc.text(new Date().toLocaleDateString('ko-KR'), W - margin, 16, { align: 'right' });
+      y = 36;
+
+      // 제목
+      addLine(draft.title, { size: 15, bold: true, color: [26, 35, 50], gap: 2 });
+      addLine(`${selectedCustomer}  ·  ${customerData?.currentMonth ?? ''}  ·  에픽카 마케팅팀`, { size: 9, color: [139, 149, 161], gap: 10 });
+
+      // 인사말
+      addSection('인사말');
+      addLine(draft.greeting, { size: 10, gap: 8 });
+
+      // 현재 성과
+      addSection('현재 성과');
+      addLine(draft.currentAchievement, { size: 10, gap: 8 });
+
+      // 제안 품목
+      addSection(`추가 제안 품목 (${draft.proposalItems?.length ?? 0}개)`);
+      (draft.proposalItems ?? []).forEach((p, i) => {
+        addLine(`${i + 1}. ${p.item}  [긴급도: ${p.urgency}]`, { size: 10, bold: true, color: [0, 89, 87], gap: 2 });
+        addLine(`   ${p.reason}`, { size: 9, color: [74, 85, 104], gap: 2 });
+        addLine(`   💡 ${p.benefit}`, { size: 9, color: [5, 150, 105], gap: 6 });
+      });
+
+      // ROI
+      addSection('ROI 분석');
+      addLine(draft.roiSummary, { size: 10, gap: 8 });
+
+      // 다음 단계
+      addSection('다음 단계');
+      addLine(draft.nextStep, { size: 10, gap: 8 });
+
+      // 마무리
+      addSection('마무리');
+      addLine(draft.closing, { size: 10, gap: 8 });
+
+      // 푸터
+      const totalPages = (doc.internal as { getNumberOfPages: () => number }).getNumberOfPages();
+      for (let p = 1; p <= totalPages; p++) {
+        doc.setPage(p);
+        doc.setFontSize(8); doc.setFont('helvetica', 'normal');
+        doc.setTextColor(176, 184, 193);
+        doc.text('에픽카 (EFICAR)  ·  eficar@eficar.co.kr  ·  010-2752-1054', margin, 290);
+        doc.text(`${p} / ${totalPages}`, W - margin, 290, { align: 'right' });
+      }
+
+      const pdfBase64 = doc.output('datauristring').split(',')[1];
+
+      const res = await fetch('/api/proposal-pdf-send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          pdfBase64,
+          recipient: pdfRecipient,
+          customer: selectedCustomer,
+          month: customerData?.currentMonth ?? '',
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error ?? '발송 실패');
+      }
+      setPdfResult('✅ 발송 완료');
+      setTimeout(() => setPdfResult(''), 4000);
+    } catch (e) {
+      setPdfResult(`❌ ${e instanceof Error ? e.message : '발송 실패'}`);
+    } finally {
+      setPdfSending(false);
     }
   };
 
@@ -477,6 +596,43 @@ export default function ProposalPage() {
               )}
               {notionError && <span style={{ fontSize: 12, color: '#F04452' }}>{notionError}</span>}
             </div>
+
+            {/* PDF 이메일 발송 */}
+            <div style={{ marginTop: 16, padding: '14px 16px', background: '#F8F9FA', borderRadius: 10, border: '1px solid #E2E8F0' }}>
+              <p style={{ fontSize: 12, fontWeight: 700, color: '#4A5568', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 5 }}>
+                <Mail style={{ width: 13, height: 13 }} /> PDF 첨부 이메일 발송
+              </p>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <input
+                  type="email"
+                  value={pdfRecipient}
+                  onChange={e => setPdfRecipient(e.target.value)}
+                  placeholder="수신자 이메일 (예: hong@sk.com)"
+                  style={{ flex: 1, padding: '8px 12px', border: '1px solid #E2E8F0', borderRadius: 8, fontSize: 13, fontFamily: 'inherit', outline: 'none' }}
+                  onFocus={e => (e.target.style.borderColor = '#005957')}
+                  onBlur={e => (e.target.style.borderColor = '#E2E8F0')}
+                />
+                <button
+                  onClick={sendAsPdf}
+                  disabled={!pdfRecipient || pdfSending}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 6, padding: '8px 18px',
+                    borderRadius: 8, border: 'none', cursor: (!pdfRecipient || pdfSending) ? 'not-allowed' : 'pointer',
+                    background: pdfResult.startsWith('✅') ? '#059669' : (!pdfRecipient || pdfSending) ? '#E2E8F0' : '#1A2332',
+                    color: (!pdfRecipient || pdfSending) ? '#8B95A1' : 'white',
+                    fontSize: 13, fontWeight: 700, transition: 'all 0.2s', whiteSpace: 'nowrap',
+                  }}
+                >
+                  <Send style={{ width: 13, height: 13 }} />
+                  {pdfSending ? 'PDF 발송 중...' : pdfResult.startsWith('✅') ? '발송 완료!' : 'PDF 발송'}
+                </button>
+              </div>
+              {pdfResult && !pdfResult.startsWith('✅') && (
+                <p style={{ fontSize: 12, color: '#DC2626', marginTop: 6 }}>{pdfResult}</p>
+              )}
+              <p style={{ fontSize: 11, color: '#B0B8C1', marginTop: 6 }}>제안서 전체를 PDF로 자동 생성해 이메일에 첨부합니다</p>
+            </div>
+
             <p style={{ fontSize: 12, color: '#8B95A1', marginTop: 8 }}>제안 품목·다음 단계가 문구에 자동 반영됩니다</p>
           </div>
         </div>

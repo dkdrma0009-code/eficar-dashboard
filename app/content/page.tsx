@@ -4,10 +4,11 @@ import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Copy, Check, RefreshCw, Sparkles, Zap, ExternalLink, Send, Mail, BookOpen } from 'lucide-react';
 import { addLibraryItem } from '@/lib/libraryStorage';
-import { getCRMNote } from '@/lib/crmStorage';
+import { getCRMNote, getAllCRM } from '@/lib/crmStorage';
 import { addCalendarEvent } from '@/lib/calendarStorage';
 import { addCampaign, getCampaigns } from '@/lib/campaignStorage';
 import { addSendLog, generateLogId, buildTrackingPixelUrl, buildClickTrackUrl } from '@/lib/sendLogStorage';
+import { addScheduledSend } from '@/lib/scheduledSendStorage';
 import { useDashboardData } from '@/lib/DataContext';
 import {
   computeViewData, getCustomerTopItems, categorizeProduct,
@@ -19,7 +20,7 @@ import type { CardItem } from '@/app/cardnews/types';
 
 const SAVINGS_RATE = 0.30;
 
-type ContentType = 'linkedin' | 'kakao' | 'email' | 'card' | 'sms' | 'lms' | 'mms';
+type ContentType = 'linkedin' | 'kakao' | 'email' | 'sms' | 'lms' | 'mms';
 
 const CONTENT_TYPES: { key: ContentType; label: string; emoji: string; desc?: string }[] = [
   { key: 'linkedin', label: 'LinkedIn 포스트',      emoji: '💼' },
@@ -28,7 +29,6 @@ const CONTENT_TYPES: { key: ContentType; label: string; emoji: string; desc?: st
   { key: 'sms',      label: 'SMS (단문)',            emoji: '📱', desc: '90바이트 이하 · 이미지 없음' },
   { key: 'lms',      label: 'LMS (장문)',            emoji: '📄', desc: '2,000자 이하 · 제목 있음' },
   { key: 'mms',      label: 'MMS (이미지)',          emoji: '🖼️', desc: '이미지 필수 · 제목 있음' },
-  { key: 'card',     label: '성과 카드 문구',         emoji: '📊' },
 ];
 
 function getByteLen(text: string) {
@@ -181,31 +181,40 @@ ${blockText}
   }
 
   if (type === 'email') {
+    // 업계 이슈 한 줄 (고객사 유형별)
+    const industryNote = /sk|롯데|렌터카|그린카/i.test(d.customer)
+      ? '최근 렌터카 업계에서 사고 수리비 원가 절감이 주요 화두로 떠오르고 있습니다.'
+      : '자동차 부품 시장에서 OEM 대비 대체부품 활용이 빠르게 확산되고 있습니다.';
+
     const v0 =
-`제목: ${d.customer} ${d.todayLabel} 에픽카 공급 성과 보고
+`제목: ${d.customer} 담당자님, 한 가지 여쭤봐도 될까요?
 
-${d.customer} 담당자님, 안녕하세요.
-에픽카 마케팅팀입니다.
+안녕하세요, ${d.customer} 담당자님.
 
-${opener}
+${industryNote}
 
-■ ${d.todayLabel} 주요 성과
-${blocks.map(b => `- ${b.replace(/^[^ ]+ /, '')}`).join('\n')}
-${d.missing.length > 0 && (emphasis.includes('newpropo') || emphasis.includes('expand') || emphasis.length === 0)
-  ? `\n■ 다음 달 확대 제안\n${d.missing.map(c => `- ${c} 도입 검토 요청`).join('\n')}\n` : ''}
-언제든지 연락 주시면 상세히 안내드리겠습니다.
+저희 에픽카가 함께하는 고객사 데이터를 보면, ${d.topItem} 같은 소모성 부품에서 OEM 대비 평균 30% 수준의 비용 절감이 실제로 나타나고 있습니다.
+
+혹시 지금 부품 수급 구조에서 개선이 필요하다고 느끼시는 부분이 있으신가요?
+부담 없이 답장 주시면 저희가 먼저 데이터를 정리해서 보내드리겠습니다.
+
+감사합니다.
+에픽카 마케팅팀 드림
 info@eficar.co.kr / 010-2752-1054`;
 
     const v0b =
-`제목: [${d.customer}] ${d.todayLabel} 에픽카 공급 리포트
+`제목: ${d.monthShort}월 렌터카 부품비 트렌드 — 참고가 되실 것 같아서요
 
 ${d.customer} 담당자님, 안녕하세요.
-파트너십 ${d.monthsActive}개월을 맞아 성과를 정리했습니다.
 
-${blockText}
-${d.missing.length > 0 && (emphasis.includes('newpropo') || emphasis.includes('expand') || emphasis.length === 0)
-  ? `\n미도입 품목 ${d.missing.join(', ')}에 대한 도입 제안서도 별도 발송 가능합니다.\n` : ''}
-감사합니다.
+${industryNote}
+
+최근 저희 파트너사 중 ${d.topItem}을 에픽카로 전환한 곳들이 연간 ${d.savingsStr} 수준의 절감을 경험하고 있습니다.
+직접 수치를 보여드리는 게 설명보다 빠를 것 같아 간단한 비교표를 준비해둔 상태입니다.
+
+필요하시면 편하게 말씀 주세요, 바로 공유드리겠습니다.
+
+에픽카 드림
 info@eficar.co.kr / 010-2752-1054`;
 
     return [v0, v0b][version % 2];
@@ -288,19 +297,7 @@ ${d.missing.length > 0 ? `\n확대 가능 품목: ${d.missing.slice(0, 2).join('
     return [v0, v1][version % 2];
   }
 
-  // card
-  const v0 =
-`[${d.todayLabel} ${d.customer} 성과 카드]
-
-${blockText}`;
-
-  const v1 =
-`${d.customer} × 에픽카
-${d.monthsActive}개월 파트너십 성과
-
-${blockText}`;
-
-  return [v0, v1][version % 2];
+  return '';
 }
 
 function stripMarkdown(text: string): string {
@@ -370,6 +367,17 @@ export default function ContentPage() {
   const [bulkProgress, setBulkProgress] = useState({ done: 0, total: 0, success: 0, fail: 0 });
   const [bulkDone, setBulkDone] = useState(false);
 
+  // 예약 발송
+  const [scheduleAt, setScheduleAt] = useState('');
+  const [scheduleSaving, setScheduleSaving] = useState(false);
+  const [scheduleFeedback, setScheduleFeedback] = useState('');
+
+  // 이메일 대량 발송
+  const [bulkEmails, setBulkEmails] = useState<{ email: string; name: string }[]>([]);
+  const [bulkEmailSending, setBulkEmailSending] = useState(false);
+  const [bulkEmailProgress, setBulkEmailProgress] = useState({ done: 0, total: 0, success: 0, fail: 0 });
+  const [bulkEmailDone, setBulkEmailDone] = useState(false);
+
   // 이메일 열람 추적 픽셀
   const [emailTrackId, setEmailTrackId] = useState<string>(() => generateLogId());
   const [emailTrackEnabled, setEmailTrackEnabled] = useState(false);
@@ -380,6 +388,9 @@ export default function ContentPage() {
   const [clickTargetUrl, setClickTargetUrl] = useState('https://eficar.co.kr');
   const [clickUrlCopied, setClickUrlCopied] = useState(false);
   const [ctaButtonLabel, setCtaButtonLabel] = useState('자세히 보기');
+
+  // 이메일 유형 A/B
+  const [emailType, setEmailType] = useState<'A' | 'B'>('A');
 
   // 이메일 CTA 박스
   const [ctaBoxEnabled, setCtaBoxEnabled] = useState(true);
@@ -533,11 +544,12 @@ export default function ContentPage() {
     }
   }, [contentData]);
 
-  // CRM에서 첫 번째 담당자 번호 자동 로드
+  // CRM에서 담당자 정보 자동 로드
   useEffect(() => {
     if (customer && customer !== '__all__') {
       const crm = getCRMNote(customer);
       if (crm.contacts?.[0]?.phone) setSmsPhone(crm.contacts[0].phone);
+      if (crm.contacts?.[0]?.email) setRecipientEmail(crm.contacts[0].email);
     }
   }, [customer]);
 
@@ -669,6 +681,103 @@ export default function ContentPage() {
     logToCampaign('etc');
     setBulkSending(false);
     setBulkDone(true);
+  };
+
+  // 이메일 수신자 파일 파싱
+  const parseBulkEmailFile = async (file: File) => {
+    const isCsv = /\.(csv|txt)$/i.test(file.name);
+    if (isCsv) {
+      const text = await file.text();
+      const rows = text.split('\n').map(l => l.trim()).filter(l => l.includes('@'));
+      setBulkEmails(rows.map(l => {
+        const parts = l.split(',');
+        return { email: parts[0].trim(), name: parts[1]?.trim() ?? '' };
+      }).filter(r => r.email.includes('@')));
+    } else {
+      const XLSX = (await import('xlsx'));
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const wb = XLSX.read(e.target?.result, { type: 'array' });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const rows = XLSX.utils.sheet_to_json<string[]>(ws, { header: 1 }) as string[][];
+        setBulkEmails(rows.slice(1).map(r => ({
+          email: String(r[0] ?? '').trim(),
+          name: String(r[1] ?? '').trim(),
+        })).filter(r => r.email.includes('@')));
+      };
+      reader.readAsArrayBuffer(file);
+    }
+    setBulkEmailDone(false);
+  };
+
+  // 이메일 대량 발송
+  const sendBulkEmail = async () => {
+    if (!bulkEmails.length || !activeText) return;
+    setBulkEmailSending(true);
+    setBulkEmailDone(false);
+    setBulkEmailProgress({ done: 0, total: bulkEmails.length, success: 0, fail: 0 });
+    const subject = parseEmailSubject(activeText);
+    const text = parseEmailBody(activeText);
+    for (const { email, name } of bulkEmails) {
+      try {
+        const trackId = emailTrackEnabled ? generateLogId() : undefined;
+        const res = await fetch('/api/email/send', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            to: email,
+            subject,
+            text,
+            trackPixelUrl: trackId ? buildTrackingPixelUrl(trackId) : undefined,
+            ctaLabel: ctaBoxEnabled ? ctaBoxLabel : undefined,
+            ctaUrl: ctaBoxEnabled ? ctaBoxUrl : undefined,
+          }),
+        });
+        if (!res.ok) throw new Error((await res.json()).error);
+        addSendLog({
+          id: trackId ?? generateLogId(),
+          channel: 'email',
+          customer: contentData?.customer || '',
+          receiver_masked: email.replace(/(.{2}).+(@.+)/, '$1***$2'),
+          content_preview: text.slice(0, 40),
+        });
+        setBulkEmailProgress(p => ({ ...p, done: p.done + 1, success: p.success + 1 }));
+      } catch {
+        setBulkEmailProgress(p => ({ ...p, done: p.done + 1, fail: p.fail + 1 }));
+      }
+      await new Promise(r => setTimeout(r, 500));
+    }
+    logToCampaign('email');
+    setBulkEmailSending(false);
+    setBulkEmailDone(true);
+  };
+
+  // 예약 발송 등록
+  const saveSchedule = async (channel: 'email' | 'sms' | 'lms' | 'mms') => {
+    if (!scheduleAt || !activeText) return;
+    setScheduleSaving(true);
+    setScheduleFeedback('');
+    const recipients = channel === 'email'
+      ? (bulkEmails.length > 0 ? bulkEmails.map(r => ({ email: r.email, name: r.name })) : recipientEmail ? [{ email: recipientEmail }] : [])
+      : (bulkNumbers.length > 0 ? bulkNumbers.map(r => ({ phone: r.phone, name: r.name })) : smsPhone ? [{ phone: smsPhone }] : []);
+    if (!recipients.length) { setScheduleFeedback('❌ 수신자를 먼저 입력하세요'); setScheduleSaving(false); return; }
+    const result = await addScheduledSend({
+      scheduled_at: new Date(scheduleAt).toISOString(),
+      channel,
+      customer: contentData?.customer ?? '',
+      subject: parseEmailSubject(activeText),
+      content: channel === 'email' ? parseEmailBody(activeText) : activeText,
+      recipients,
+      cta_label: channel === 'email' && ctaBoxEnabled ? ctaBoxLabel : undefined,
+      cta_url: channel === 'email' && ctaBoxEnabled ? ctaBoxUrl : undefined,
+    });
+    if (result) {
+      setScheduleFeedback(`✅ ${recipients.length}명 · ${scheduleAt} 예약 완료`);
+    } else {
+      setScheduleFeedback('❌ 예약 저장 실패');
+    }
+    setScheduleSaving(false);
+    setTimeout(() => setScheduleFeedback(''), 4000);
   };
 
   // 수신번호 파일 파싱 (CSV / Excel)
@@ -811,7 +920,14 @@ export default function ContentPage() {
   };
 
   const registerEmailTrackLog = () => {
-    addSendLog({ id: emailTrackId, channel: 'email', customer: contentData?.customer ?? '', receiver_masked: recipientEmail || '미입력', content_preview: activeText.slice(0, 40) });
+    // 발송 기록은 항상 저장, 열람 추적 픽셀은 emailTrackEnabled 시에만 활성
+    addSendLog({
+      id: emailTrackId,
+      channel: 'email',
+      customer: contentData?.customer ?? '',
+      receiver_masked: recipientEmail || '미입력',
+      content_preview: activeText.slice(0, 40),
+    });
     setEmailTrackId(generateLogId());
   };
 
@@ -822,7 +938,7 @@ export default function ContentPage() {
     window.open(`https://mail.google.com/mail/?view=cm&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}${to}`, '_blank');
     logToCalendar('email');
     logToCampaign('email');
-    if (emailTrackEnabled) registerEmailTrackLog();
+    registerEmailTrackLog();
     showFeedback('📧 Gmail 작성 창이 열렸습니다. 캘린더 · 캠페인에 자동 기록됐습니다.');
   };
 
@@ -832,7 +948,7 @@ export default function ContentPage() {
     window.location.href = `mailto:${recipientEmail}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
     logToCalendar('email');
     logToCampaign('email');
-    if (emailTrackEnabled) registerEmailTrackLog();
+    registerEmailTrackLog();
     showFeedback('📧 메일 앱이 열렸습니다. 캘린더 · 캠페인에 자동 기록됐습니다.');
   };
 
@@ -861,7 +977,7 @@ export default function ContentPage() {
       setEmailDirectResult('✅ 발송 완료');
       logToCalendar('email');
       logToCampaign('email');
-      if (emailTrackEnabled) registerEmailTrackLog();
+      registerEmailTrackLog();
       showFeedback('📧 이메일이 발송됐습니다. 캘린더 · 캠페인에 자동 기록됐습니다.');
     } catch (e) {
       setEmailDirectResult(`❌ ${e instanceof Error ? e.message : '발송 실패'}`);
@@ -896,6 +1012,7 @@ export default function ContentPage() {
         body: JSON.stringify({
           proposalContext: linkedProposal ?? undefined,
           type: contentType,
+          emailType: contentType === 'email' ? emailType : undefined,
           customer: contentData.customer,
           month: contentData.todayLabel,
           currentSales: contentData.currentSales,
@@ -1074,6 +1191,22 @@ export default function ContentPage() {
             </p>
           )}
         </div>
+
+        {/* 예약 발송 (SMS/LMS/MMS) */}
+        <div style={{ padding: '10px 12px', background: '#F8F9FA', borderRadius: 8, border: '1px solid #E2E8F0' }}>
+          <p style={{ fontSize: 11, fontWeight: 700, color: '#8B95A1', marginBottom: 8 }}>🕐 예약 발송</p>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <input type="datetime-local" value={scheduleAt} onChange={e => setScheduleAt(e.target.value)}
+              style={{ flex: 1, padding: '6px 10px', border: '1px solid #E2E8F0', borderRadius: 7, fontSize: 12, fontFamily: 'inherit' }} />
+            <button
+              onClick={() => saveSchedule(contentType as 'sms' | 'lms' | 'mms')}
+              disabled={scheduleSaving || !scheduleAt}
+              style={{ padding: '6px 14px', borderRadius: 7, border: 'none', cursor: (!scheduleAt || scheduleSaving) ? 'not-allowed' : 'pointer', fontSize: 12, fontWeight: 700, background: (!scheduleAt || scheduleSaving) ? '#E2E8F0' : '#191F28', color: (!scheduleAt || scheduleSaving) ? '#8B95A1' : 'white', whiteSpace: 'nowrap' }}>
+              {scheduleSaving ? '저장중...' : '예약'}
+            </button>
+          </div>
+          {scheduleFeedback && <p style={{ fontSize: 12, fontWeight: 600, color: scheduleFeedback.startsWith('✅') ? '#16A34A' : '#DC2626', marginTop: 6 }}>{scheduleFeedback}</p>}
+        </div>
       </div>
 
       {/* 우측: 휴대폰 미리보기 (SMS/LMS 전용) */}
@@ -1215,6 +1348,27 @@ export default function ContentPage() {
                 <span style={{ fontSize: 12, color: '#005957', fontWeight: 600 }}>📋 제안서 연동됨: {linkedProposal.title}</span>
                 <button onClick={() => { setLinkedProposal(null); sessionStorage.removeItem('eficar-proposal-context'); }}
                   style={{ fontSize: 11, color: '#8B95A1', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>✕ 해제</button>
+              </div>
+            )}
+
+            {/* 이메일 유형 A/B (AI 모드일 때만 표시) */}
+            {contentType === 'email' && aiMode && (
+              <div style={{ padding: '10px 12px', background: '#F0FDF9', borderRadius: 10, border: '1px solid #A7F3D0' }}>
+                <p style={{ fontSize: 11, fontWeight: 700, color: '#005957', marginBottom: 8 }}>이메일 전략 유형</p>
+                <div style={{ display: 'flex', background: '#E6F2F2', borderRadius: 8, padding: 3, gap: 3 }}>
+                  {([['A', '열람률 중심', '짧고 가볍게 (100자↓)'], ['B', '행동유도 중심', '상세·CTA 포함 (250자)']] as const).map(([key, label, desc]) => (
+                    <button key={key} onClick={() => setEmailType(key)}
+                      style={{
+                        flex: 1, padding: '7px 4px', borderRadius: 6, border: 'none', cursor: 'pointer',
+                        background: emailType === key ? 'white' : 'transparent',
+                        boxShadow: emailType === key ? '0 1px 4px rgba(0,0,0,0.1)' : 'none',
+                        transition: 'all 0.15s',
+                      }}>
+                      <p style={{ fontSize: 12, fontWeight: 700, color: emailType === key ? '#005957' : '#8B95A1', margin: 0 }}>Option {key} — {label}</p>
+                      <p style={{ fontSize: 10, color: emailType === key ? '#374151' : '#8B95A1', margin: '2px 0 0' }}>{desc}</p>
+                    </button>
+                  ))}
+                </div>
               </div>
             )}
 
@@ -1481,6 +1635,99 @@ export default function ContentPage() {
                           </div>
                         </div>
                       )}
+                      {/* 예약 발송 (이메일) */}
+                      <div style={{ marginTop: 10, padding: '10px 12px', background: '#F8F9FA', borderRadius: 8, border: '1px solid #E2E8F0' }}>
+                        <p style={{ fontSize: 11, fontWeight: 700, color: '#8B95A1', marginBottom: 8 }}>🕐 예약 발송</p>
+                        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                          <input type="datetime-local" value={scheduleAt} onChange={e => setScheduleAt(e.target.value)}
+                            style={{ flex: 1, padding: '6px 10px', border: '1px solid #E2E8F0', borderRadius: 7, fontSize: 12, fontFamily: 'inherit' }} />
+                          <button onClick={() => saveSchedule('email')} disabled={scheduleSaving || !scheduleAt}
+                            style={{ padding: '6px 14px', borderRadius: 7, border: 'none', cursor: (!scheduleAt || scheduleSaving) ? 'not-allowed' : 'pointer', fontSize: 12, fontWeight: 700, background: (!scheduleAt || scheduleSaving) ? '#E2E8F0' : '#005957', color: (!scheduleAt || scheduleSaving) ? '#8B95A1' : 'white', whiteSpace: 'nowrap' }}>
+                            {scheduleSaving ? '저장중...' : '예약'}
+                          </button>
+                        </div>
+                        {scheduleFeedback && <p style={{ fontSize: 12, fontWeight: 600, color: scheduleFeedback.startsWith('✅') ? '#16A34A' : '#DC2626', marginTop: 6 }}>{scheduleFeedback}</p>}
+                      </div>
+
+                      {/* 이메일 대량 발송 */}
+                      <div style={{ marginTop: 12, padding: '12px 14px', background: '#FAFBFC', borderRadius: 8, border: '1px solid #E2E8F0' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: bulkEmails.length > 0 ? 8 : 0 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <span style={{ fontSize: 11, fontWeight: 700, color: '#8B95A1' }}>📧 이메일 대량 발송</span>
+                            {bulkEmails.length > 0 && <span style={{ fontSize: 11, fontWeight: 700, color: '#005957', background: '#E6F2F2', padding: '2px 8px', borderRadius: 10 }}>{bulkEmails.length}명</span>}
+                          </div>
+                          <div style={{ display: 'flex', gap: 6 }}>
+                            <button
+                              onClick={() => {
+                                const crm = getAllCRM();
+                                const target = customer && customer !== '__all__' ? { [customer]: crm[customer] } : crm;
+                                const emails: { email: string; name: string }[] = [];
+                                Object.values(target).forEach(note => {
+                                  (note?.contacts ?? []).forEach(c => {
+                                    if (c.email) emails.push({ email: c.email, name: c.name ?? '' });
+                                  });
+                                });
+                                if (emails.length === 0) { alert('CRM에 이메일이 등록된 담당자가 없습니다.'); return; }
+                                setBulkEmails(emails);
+                                setBulkEmailDone(false);
+                              }}
+                              style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid #7C3AED', cursor: 'pointer', fontSize: 11, fontWeight: 600, color: '#7C3AED', background: 'white' }}
+                            >
+                              👥 CRM 불러오기
+                            </button>
+                            <label style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid #005957', cursor: 'pointer', fontSize: 11, fontWeight: 600, color: '#005957', background: 'white' }}>
+                              📂 파일 등록
+                              <input type="file" accept=".csv,.txt,.xlsx,.xls" onChange={e => { const f = e.target.files?.[0]; if (f) parseBulkEmailFile(f); e.target.value = ''; }} style={{ display: 'none' }} />
+                            </label>
+                            {bulkEmails.length > 0 && (
+                              <button onClick={() => { setBulkEmails([]); setBulkEmailDone(false); }} style={{ padding: '4px 8px', borderRadius: 6, border: '1px solid #E2E8F0', background: 'white', color: '#8B95A1', fontSize: 11, cursor: 'pointer' }}>초기화</button>
+                            )}
+                          </div>
+                        </div>
+
+                        {bulkEmails.length > 0 && (
+                          <div style={{ maxHeight: 100, overflowY: 'auto', background: 'white', border: '1px solid #E2E8F0', borderRadius: 6, fontSize: 12, color: '#374151', marginBottom: 8 }}>
+                            <div style={{ padding: '4px 8px', background: '#F8F9FA', borderBottom: '1px solid #E2E8F0', display: 'flex', gap: 16, fontSize: 11, fontWeight: 700, color: '#8B95A1' }}>
+                              <span style={{ minWidth: 20 }}>No</span><span style={{ flex: 1 }}>이메일</span><span>이름</span>
+                            </div>
+                            {bulkEmails.slice(0, 50).map((r, i) => (
+                              <div key={i} style={{ padding: '3px 8px', borderBottom: '1px solid #F2F4F6', display: 'flex', gap: 16 }}>
+                                <span style={{ color: '#8B95A1', minWidth: 20 }}>{i + 1}</span>
+                                <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.email}</span>
+                                <span style={{ color: '#8B95A1' }}>{r.name || '—'}</span>
+                              </div>
+                            ))}
+                            {bulkEmails.length > 50 && <p style={{ padding: '4px 8px', color: '#8B95A1', fontSize: 11 }}>... 외 {bulkEmails.length - 50}명</p>}
+                          </div>
+                        )}
+
+                        {bulkEmailSending && (
+                          <div style={{ marginBottom: 8 }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, marginBottom: 4 }}>
+                              <span style={{ color: '#8B95A1' }}>발송 중 {bulkEmailProgress.done}/{bulkEmailProgress.total}</span>
+                              <span style={{ color: '#005957', fontWeight: 700 }}>성공 {bulkEmailProgress.success} · <span style={{ color: '#EF4444' }}>실패 {bulkEmailProgress.fail}</span></span>
+                            </div>
+                            <div style={{ height: 6, background: '#E2E8F0', borderRadius: 3, overflow: 'hidden' }}>
+                              <div style={{ height: '100%', background: '#005957', borderRadius: 3, width: `${(bulkEmailProgress.done / bulkEmailProgress.total) * 100}%`, transition: 'width 0.3s' }} />
+                            </div>
+                          </div>
+                        )}
+                        {bulkEmailDone && <p style={{ fontSize: 12, fontWeight: 700, color: '#00B386', marginBottom: 6 }}>✅ 완료 — 성공 {bulkEmailProgress.success}건 · 실패 {bulkEmailProgress.fail}건</p>}
+
+                        {bulkEmails.length > 0 && !bulkEmailSending && !bulkEmailDone && (
+                          <button onClick={sendBulkEmail}
+                            style={{ width: '100%', padding: '9px', borderRadius: 7, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 700, background: '#005957', color: 'white' }}>
+                            🚀 {bulkEmails.length}명 일괄 발송
+                          </button>
+                        )}
+
+                        {bulkEmails.length === 0 && (
+                          <p style={{ fontSize: 11, color: '#8B95A1', textAlign: 'center', padding: '4px 0' }}>
+                            CSV/Excel: A열=이메일, B열=이름(선택)
+                          </p>
+                        )}
+                      </div>
+
                       {/* 이메일 CTA 버튼 + 클릭 추적 */}
                       <label style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8, cursor: 'pointer', userSelect: 'none' }}>
                         <input type="checkbox" checked={clickTrackEnabled} onChange={e => {
@@ -1783,16 +2030,6 @@ export default function ContentPage() {
                           <Mail style={{ width: 13, height: 13 }} /> Gmail
                         </button>
                       </>
-                    )}
-                    {contentType === 'card' && (
-                      <button onClick={copy} style={{
-                        display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px',
-                        borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 700,
-                        background: copied ? '#005957' : '#191F28', color: 'white', transition: 'all 0.2s',
-                      }}>
-                        {copied ? <Check style={{ width: 14, height: 14 }} /> : <Copy style={{ width: 14, height: 14 }} />}
-                        {copied ? '복사됨!' : '문구 복사'}
-                      </button>
                     )}
                   </div>
 

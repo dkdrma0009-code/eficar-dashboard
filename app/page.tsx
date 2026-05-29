@@ -8,15 +8,12 @@ import { useDashboardData } from '@/lib/DataContext';
 import { getCampaigns } from '@/lib/campaignStorage';
 import { getAllCRM } from '@/lib/crmStorage';
 import { getActivities, fetchActivitiesFromDB, ActivityItem } from '@/lib/activityStorage';
-import { getMemory } from '@/lib/aiMemoryStorage';
-import { computeStrategicInsights, computePriorityRankings } from '@/lib/intelligenceEngine';
-import { syncAutoTasks, generateSignals } from '@/lib/autonomousOpsStorage';
 import AIInsightsPanel from '@/components/AIInsightsPanel';
 import QuickGenerateDrawer from '@/components/QuickGenerateDrawer';
 import type { DashboardData } from '@/lib/types';
 import {
   Upload, AlertTriangle, TrendingUp, Sparkles, BarChart2,
-  Clock, Zap, ChevronRight, Send, LayoutDashboard, Bot, Search, Brain, Cpu,
+  Clock, Zap, ChevronRight, Send, LayoutDashboard, Bot, Search,
 } from 'lucide-react';
 
 // ── 타입 ──────────────────────────────────────────────────────
@@ -207,8 +204,6 @@ function AIStudio({ data }: { data: DashboardData }) {
     if (typeof window === 'undefined') return false;
     return sessionStorage.getItem('eficar-brief-dismissed') !== '1';
   });
-  const [opsTaskCount, setOpsTaskCount] = useState(0);
-  const [opsSignalCount, setOpsSignalCount] = useState(0);
   const [statusIdx, setStatusIdx] = useState(0);
 
   const STATUS_MSGS = ['고객 관계 분석 중', '위험 신호 감지 중', '우선순위 재계산 중', '캠페인 성과 학습 중', '팔로업 타이밍 계산 중'];
@@ -218,13 +213,6 @@ function AIStudio({ data }: { data: DashboardData }) {
     setActivities(getActivities());
     fetchActivitiesFromDB().then(setActivities).catch(() => {});
   }, []);
-
-  useEffect(() => {
-    const tasks = syncAutoTasks(viewData.customerStats, activities);
-    setOpsTaskCount(tasks.filter(t => t.status === 'prepared').length);
-    const sigs = generateSignals(viewData.customerStats, activities);
-    setOpsSignalCount(sigs.length);
-  }, [viewData.customerStats, activities]);
 
   useEffect(() => {
     const t = setInterval(() => setStatusIdx(i => (i + 1) % STATUS_MSGS.length), 3500);
@@ -263,33 +251,6 @@ function AIStudio({ data }: { data: DashboardData }) {
     s.push(`${formatMonth(data.currentMonth)} 월간 보고서 작성`);
     return s.slice(0, 3);
   }, [priorityCustomers, growingCustomers, data]);
-
-  // ── Smart Templates ──
-  const smartTemplates = useMemo(() => {
-    return data.customers.slice(0, 6).map(name => {
-      const mem = getMemory(name);
-      const stat = viewData.customerStats.find(cs => cs.name === name);
-      return { name, tone: mem?.lastTone as string | undefined, count: (mem?.generationCount as number) ?? 0, growthRate: stat?.growthRate ?? 0 };
-    }).filter(t => t.count > 0);
-  }, [data.customers, viewData.customerStats]);
-
-  // ── Customer Timelines ──
-  const customerTimelines = useMemo(() => {
-    return priorityCustomers.slice(0, 2).map(c => {
-      const cActivities = activities.filter(a => a.customer === c.name);
-      const steps: { icon: string; label: string; time?: string; done: boolean; drawer?: { action: 'message' | 'proposal'; customer: string; growthRate: number } }[] = [
-        { icon: '⚠️', label: `${formatPercent(c.growthRate)} 감소 감지`, done: true },
-      ];
-      cActivities.forEach(a => {
-        steps.push({ icon: ACTIVITY_EMOJI[a.type] ?? '✨', label: a.description, time: a.createdAt, done: true });
-      });
-      const hasMessage = cActivities.some(a => a.type === 'message');
-      const hasProposal = cActivities.some(a => a.type === 'proposal');
-      if (!hasMessage) steps.push({ icon: '💬', label: '유지 메시지 생성 추천', done: false, drawer: { action: 'message', customer: c.name, growthRate: c.growthRate } });
-      else if (!hasProposal) steps.push({ icon: '📋', label: '제안서 생성 추천', done: false, drawer: { action: 'proposal', customer: c.name, growthRate: c.growthRate } });
-      return { customer: c, steps };
-    });
-  }, [priorityCustomers, activities]);
 
   const handleGenerated = useCallback((item: ActivityItem) => {
     setActivities(prev => [item, ...prev].slice(0, 20));
@@ -624,50 +585,6 @@ function AIStudio({ data }: { data: DashboardData }) {
           </div>
         )}
 
-        {/* ─ Intelligence Entry Point ─ */}
-        {(() => {
-          const campaigns = getCampaigns();
-          const insights = computeStrategicInsights(viewData.customerStats, activities);
-          const topPriority = computePriorityRankings(viewData.customerStats, activities, campaigns)[0];
-          return (
-            <div style={{ marginBottom: 16, display: 'grid', gridTemplateColumns: '1fr auto', gap: 10, alignItems: 'stretch' }}>
-              {/* 인사이트 미리보기 */}
-              <div style={{ display: 'flex', gap: 8, overflow: 'hidden' }}>
-                {insights.slice(0, 2).map((ins, i) => {
-                  const colors = {
-                    warning:     { border: '#FCA5A5', bg: '#FEF9F9', text: '#DC2626' },
-                    opportunity: { border: '#6EE7B7', bg: '#F0FDF9', text: '#059669' },
-                    tip:         { border: '#93C5FD', bg: '#F0F7FF', text: '#2563EB' },
-                  }[ins.type] ?? { border: '#E2E8F0', bg: 'white', text: '#6B7280' };
-                  return (
-                    <div
-                      key={i}
-                      onClick={() => router.push('/ai-coach')}
-                      style={{ flex: 1, borderRadius: 10, border: `1px solid ${colors.border}`, background: colors.bg, padding: '10px 14px', cursor: 'pointer', minWidth: 0 }}
-                    >
-                      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6 }}>
-                        <span style={{ fontSize: 13, flexShrink: 0 }}>{ins.icon}</span>
-                        <p style={{ fontSize: 11, color: '#4A5568', lineHeight: 1.5, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const }}>{ins.text}</p>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-              {/* Intelligence 바로가기 */}
-              <button
-                onClick={() => router.push('/ai-coach')}
-                style={{ padding: '10px 16px', borderRadius: 10, border: '1px solid #E8ECEF', background: 'white', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, flexShrink: 0 }}
-              >
-                <Brain style={{ width: 18, height: 18, color: '#7C3AED' }} />
-                <span style={{ fontSize: 10, fontWeight: 700, color: '#7C3AED', whiteSpace: 'nowrap' }}>Intelligence</span>
-                {topPriority && (
-                  <span style={{ fontSize: 9, color: '#B0B8C1' }}>{topPriority.customerName} ↑</span>
-                )}
-              </button>
-            </div>
-          );
-        })()}
-
         {/* ─ Command Bar ─ */}
         <div style={{ marginBottom: 20 }}>
           <div style={{
@@ -883,64 +800,6 @@ function AIStudio({ data }: { data: DashboardData }) {
               </div>
             </div>
 
-            {/* 4. AI Timeline Intelligence */}
-            {customerTimelines.length > 0 && (
-              <div className="animate-slide-up">
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-                  <Clock style={{ width: 14, height: 14, color: '#8B95A1' }} />
-                  <h2 style={{ fontSize: 14, fontWeight: 800, color: '#191F28' }}>AI 타임라인</h2>
-                  <span style={{ fontSize: 11, color: '#B0B8C1' }}>· 고객사 대응 흐름</span>
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                  {customerTimelines.map(({ customer: c, steps }) => (
-                    <div key={c.name} className="card" style={{ padding: '16px 18px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
-                        <div style={{ width: 8, height: 8, borderRadius: '50%', background: c.grade === 'danger' ? '#DC2626' : '#D97706' }} />
-                        <p style={{ fontSize: 13, fontWeight: 800, color: '#191F28' }}>{c.name}</p>
-                        <span style={{ fontSize: 11, fontWeight: 700, color: c.growthRate < 0 ? '#DC2626' : '#059669' }}>{formatPercent(c.growthRate)}</span>
-                      </div>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
-                        {steps.map((step, si) => (
-                          <div key={si} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, paddingBottom: si < steps.length - 1 ? 12 : 0, position: 'relative' }}>
-                            {/* 연결선 */}
-                            {si < steps.length - 1 && (
-                              <div style={{ position: 'absolute', left: 11, top: 22, width: 2, height: 'calc(100% - 10px)', background: step.done ? '#E2E8F0' : '#F8F9FA' }} />
-                            )}
-                            {/* 아이콘 노드 */}
-                            <div style={{
-                              width: 24, height: 24, borderRadius: '50%', flexShrink: 0, zIndex: 1,
-                              display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11,
-                              background: step.done ? '#F2F4F6' : '#E6F2F2',
-                              border: step.done ? '2px solid #E2E8F0' : '2px solid #005957',
-                            }}>
-                              {step.icon}
-                            </div>
-                            <div style={{ flex: 1, paddingTop: 2 }}>
-                              <p style={{ fontSize: 12, fontWeight: step.done ? 500 : 700, color: step.done ? '#8B95A1' : '#191F28', lineHeight: 1.4 }}>
-                                {step.label}
-                              </p>
-                              {step.time && (
-                                <p style={{ fontSize: 10, color: '#B0B8C1' }}>{timeAgo(step.time)}</p>
-                              )}
-                            </div>
-                            {/* 미완료 단계 실행 버튼 */}
-                            {!step.done && step.drawer && (
-                              <button
-                                onClick={() => setDrawerCtx(step.drawer!)}
-                                style={{ padding: '4px 10px', borderRadius: 7, border: 'none', background: '#005957', color: 'white', fontSize: 10, fontWeight: 700, cursor: 'pointer', flexShrink: 0 }}
-                              >
-                                실행 →
-                              </button>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
             {/* 5. 성장 고객 */}
             {growingCustomers.length > 0 && (
               <div className="animate-slide-up">
@@ -1090,37 +949,6 @@ function AIStudio({ data }: { data: DashboardData }) {
               </div>
             </div>
 
-            {/* AI Operations Center 카드 */}
-            <div
-              className="card"
-              onClick={() => router.push('/campaigns')}
-              style={{ padding: '14px 18px', cursor: 'pointer', background: 'linear-gradient(135deg, #1E293B 0%, #334155 100%)', border: 'none' }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                <Cpu style={{ width: 14, height: 14, color: 'white' }} />
-                <p style={{ fontSize: 12, fontWeight: 700, color: 'white' }}>AI Operations Center</p>
-                {opsTaskCount > 0 && (
-                  <span style={{ fontSize: 10, fontWeight: 800, background: '#F59E0B', color: 'white', padding: '1px 7px', borderRadius: 100, marginLeft: 'auto' }}>{opsTaskCount}건 대기</span>
-                )}
-              </div>
-              <div style={{ display: 'flex', gap: 12 }}>
-                <div>
-                  <p style={{ fontSize: 18, fontWeight: 800, color: 'white' }}>{opsTaskCount}</p>
-                  <p style={{ fontSize: 10, color: 'rgba(255,255,255,0.6)' }}>준비된 초안</p>
-                </div>
-                <div>
-                  <p style={{ fontSize: 18, fontWeight: 800, color: 'white' }}>{opsSignalCount}</p>
-                  <p style={{ fontSize: 10, color: 'rgba(255,255,255,0.6)' }}>감지된 신호</p>
-                </div>
-                <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'flex-end' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                    <div style={{ width: 5, height: 5, borderRadius: '50%', background: '#10B981' }} />
-                    <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.7)', fontWeight: 500 }}>운영 중</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
             {/* AI Activity Feed */}
             <div className="card" style={{ padding: '16px 18px' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
@@ -1192,33 +1020,6 @@ function AIStudio({ data }: { data: DashboardData }) {
                 </div>
               )}
             </div>
-
-            {/* Smart Templates */}
-            {smartTemplates.length > 0 && (
-              <div className="card" style={{ padding: '16px 18px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
-                  <Sparkles style={{ width: 12, height: 12, color: '#005957' }} />
-                  <p style={{ fontSize: 12, fontWeight: 700, color: '#8B95A1' }}>스마트 템플릿</p>
-                  <span style={{ fontSize: 10, color: '#B0B8C1', marginLeft: 'auto' }}>메모리 기반</span>
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  {smartTemplates.map(t => (
-                    <div key={t.name} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <p style={{ fontSize: 12, fontWeight: 700, color: '#191F28', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.name}</p>
-                        {t.tone && <p style={{ fontSize: 10, color: '#8B95A1' }}>{String(t.tone)} 톤 · {t.count}회 생성</p>}
-                      </div>
-                      <button
-                        onClick={() => setDrawerCtx({ customer: t.name, action: 'message', growthRate: t.growthRate })}
-                        style={{ padding: '4px 9px', borderRadius: 6, border: '1px solid #E8ECEF', background: 'white', color: '#005957', fontSize: 10, fontWeight: 700, cursor: 'pointer', flexShrink: 0 }}
-                      >
-                        재사용 →
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
 
             {/* AI 인사이트 */}
             <AIInsightsPanel data={data} trendMap={viewData.trendMap} />

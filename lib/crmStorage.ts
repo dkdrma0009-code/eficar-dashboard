@@ -4,6 +4,7 @@ export interface ContactPerson {
   name: string;
   phone: string;  // 01012345678 형식
   role?: string;
+  email?: string;
 }
 
 export interface CRMNote {
