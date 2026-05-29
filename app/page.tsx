@@ -316,7 +316,7 @@ function AIStudio({ data }: { data: DashboardData }) {
     } else if (lower.includes('비교')) {
       router.push('/compare');
     } else {
-      router.push('/ai-coach');
+      router.push('/report');
     }
   }, [priorityCustomers, data.customers, viewData.customerStats, activities, router]);
 
@@ -499,7 +499,6 @@ function AIStudio({ data }: { data: DashboardData }) {
     { label: '📋 제안서', href: '/proposal' },
     { label: '📊 보고서', href: '/report' },
     { label: '🃏 카드뉴스', href: '/cardnews' },
-    { label: '🤖 AI 코치', href: '/ai-coach' },
   ];
 
   return (
