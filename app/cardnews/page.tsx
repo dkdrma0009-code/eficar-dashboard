@@ -57,6 +57,45 @@ export default function CardNewsPage() {
     setCards(prev => prev.map((c, i) => i === index ? { ...c, data: { ...c.data, ...patch } } as CardItem : c));
   }, []);
 
+  const moveCard = useCallback((from: number, to: number) => {
+    setCards(prev => {
+      const next = [...prev];
+      const [removed] = next.splice(from, 1);
+      next.splice(to, 0, removed);
+      return next;
+    });
+    setSelectedCard(to);
+  }, []);
+
+  const deleteCard = useCallback((index: number) => {
+    setCards(prev => {
+      if (prev.length <= 1) return prev;
+      return prev.filter((_, i) => i !== index);
+    });
+    setSelectedCard(prev => Math.min(prev, Math.max(0, cards.length - 2)));
+  }, [cards.length]);
+
+  const addCard = useCallback((layout: CardItem['layout']) => {
+    const blank: Record<CardItem['layout'], CardItem> = {
+      'cover':         { layout: 'cover',         data: { headline: '새 카드', subheadline: '', highlight: '', badge: '' } },
+      'big-number':    { layout: 'big-number',     data: { number: '00%', unit: '', tag: '지표', desc: '설명을 입력하세요' } },
+      'before-after':  { layout: 'before-after',   data: { headline: '비교', headerA: 'OEM 부품', headerB: '에픽카', rows: [{ label: '항목', a: '-', b: '-' }] } },
+      'list':          { layout: 'list',            data: { headline: '핵심 포인트', items: [{ title: '항목 1', desc: '' }, { title: '항목 2', desc: '' }] } },
+      'customer-case': { layout: 'customer-case',  data: { headline: '파트너사 실적', cases: [{ name: '고객사', metric: '지표', number: '-', unit: '' }] } },
+      'timeline':      { layout: 'timeline',        data: { headline: '도입 프로세스', steps: [{ title: '1단계', desc: '' }, { title: '2단계', desc: '' }] } },
+      'quote':         { layout: 'quote',           data: { quote: '인용 문구를 입력하세요', attribution: '출처', context: '' } },
+      'cta':           { layout: 'cta',             data: { headline: '지금 바로 시작하세요', subheadline: '에픽카 파트너십 문의', contact1: 'eficar@eficar.co.kr', contact2: '010-2752-1054' } },
+    };
+    const newCard = blank[layout];
+    setCards(prev => {
+      const next = [...prev];
+      // cta가 마지막이면 그 앞에 삽입
+      const insertAt = next[next.length - 1]?.layout === 'cta' ? next.length - 1 : next.length;
+      next.splice(insertAt, 0, newCard);
+      return next;
+    });
+  }, []);
+
   const handleGenerate = useCallback(async (input: CardFormInput) => {
     setLoading(true);
     setError('');
@@ -213,46 +252,59 @@ export default function CardNewsPage() {
 
           <div className="flex gap-6">
             {/* Thumbnail strip */}
+            <div className="flex flex-col gap-3" style={{ width: 340, flexShrink: 0 }}>
             <div
               ref={scrollRef}
               className="flex flex-col gap-3 overflow-y-auto"
-              style={{ maxHeight: '80vh', width: 340, flexShrink: 0 }}
+              style={{ maxHeight: 'calc(80vh - 52px)' }}
             >
               {cards.map((card, i) => (
-                <button
-                  key={i}
-                  onClick={() => setSelectedCard(i)}
-                  className={`relative rounded-xl overflow-hidden transition-all ${
-                    selectedCard === i
-                      ? 'ring-2 ring-[#005957] shadow-lg'
-                      : 'ring-1 ring-gray-200 hover:ring-gray-400'
-                  }`}
-                  style={{ width: 320, height: previewH, flexShrink: 0 }}
-                >
-                  <CardCanvas card={card} ratio={ratio} scale={previewScale} />
-                  <div
-                    style={{
-                      position: 'absolute', top: 8, left: 8,
-                      background: 'rgba(0,0,0,0.5)', color: '#fff',
-                      fontSize: 11, fontWeight: 700, borderRadius: 4,
-                      padding: '2px 6px',
-                    }}
+                <div key={i} className="relative group" style={{ width: 320, flexShrink: 0 }}>
+                  <button
+                    onClick={() => setSelectedCard(i)}
+                    className={`relative rounded-xl overflow-hidden transition-all w-full ${
+                      selectedCard === i
+                        ? 'ring-2 ring-[#005957] shadow-lg'
+                        : 'ring-1 ring-gray-200 hover:ring-gray-400'
+                    }`}
+                    style={{ height: previewH, display: 'block' }}
                   >
-                    {i + 1}/{cards.length}
+                    <CardCanvas card={card} ratio={ratio} scale={previewScale} />
+                    <div style={{ position: 'absolute', top: 8, left: 8, background: 'rgba(0,0,0,0.5)', color: '#fff', fontSize: 11, fontWeight: 700, borderRadius: 4, padding: '2px 6px' }}>
+                      {i + 1}/{cards.length}
+                    </div>
+                    <div style={{ position: 'absolute', bottom: 8, left: 8, background: 'rgba(0,0,0,0.4)', color: '#fff', fontSize: 11, borderRadius: 4, padding: '2px 6px', textTransform: 'capitalize' }}>
+                      {card.layout}
+                    </div>
+                  </button>
+                  {/* 재배치/삭제 버튼 — 호버 시 표시 */}
+                  <div className="absolute top-2 right-2 flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button
+                      onClick={() => moveCard(i, i - 1)}
+                      disabled={i === 0}
+                      className="w-6 h-6 rounded bg-black/60 text-white text-xs flex items-center justify-center disabled:opacity-20 hover:bg-black/80"
+                      title="위로"
+                    >↑</button>
+                    <button
+                      onClick={() => moveCard(i, i + 1)}
+                      disabled={i === cards.length - 1}
+                      className="w-6 h-6 rounded bg-black/60 text-white text-xs flex items-center justify-center disabled:opacity-20 hover:bg-black/80"
+                      title="아래로"
+                    >↓</button>
+                    <button
+                      onClick={() => deleteCard(i)}
+                      disabled={cards.length <= 1}
+                      className="w-6 h-6 rounded bg-red-500/80 text-white text-xs flex items-center justify-center disabled:opacity-20 hover:bg-red-600"
+                      title="삭제"
+                    >✕</button>
                   </div>
-                  <div
-                    style={{
-                      position: 'absolute', bottom: 8, left: 8,
-                      background: 'rgba(0,0,0,0.4)', color: '#fff',
-                      fontSize: 11, borderRadius: 4, padding: '2px 6px',
-                      textTransform: 'capitalize',
-                    }}
-                  >
-                    {card.layout}
-                  </div>
-                </button>
+                </div>
               ))}
             </div>
+
+            {/* + 카드 추가 */}
+            <AddCardButton onAdd={addCard} />
+            </div>{/* end thumbnail strip outer */}
 
             {/* Large single preview */}
             <div className="flex-1 flex flex-col items-center">
@@ -559,4 +611,44 @@ function CardEditor({ card, index, updateCard }: {
     );
   }
   return null;
+}
+
+/* ── Add Card Button ────────────────────────────────────────────────────────── */
+
+const LAYOUT_OPTIONS: { layout: CardItem['layout']; label: string }[] = [
+  { layout: 'cover',         label: '커버' },
+  { layout: 'big-number',    label: '거대 숫자' },
+  { layout: 'before-after',  label: '비교표' },
+  { layout: 'list',          label: '리스트' },
+  { layout: 'customer-case', label: '고객사 실적' },
+  { layout: 'timeline',      label: '타임라인' },
+  { layout: 'quote',         label: '인용문' },
+  { layout: 'cta',           label: 'CTA' },
+];
+
+function AddCardButton({ onAdd }: { onAdd: (layout: CardItem['layout']) => void }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setOpen(v => !v)}
+        className="w-full py-2 rounded-xl border-2 border-dashed border-gray-300 text-sm font-semibold text-gray-400 hover:border-[#005957] hover:text-[#005957] transition-colors flex items-center justify-center gap-1"
+      >
+        + 카드 추가
+      </button>
+      {open && (
+        <div className="absolute bottom-full mb-1 left-0 right-0 bg-white rounded-xl border border-gray-200 shadow-lg overflow-hidden z-10">
+          {LAYOUT_OPTIONS.map(({ layout, label }) => (
+            <button
+              key={layout}
+              onClick={() => { onAdd(layout); setOpen(false); }}
+              className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-[#E6F2F2] hover:text-[#005957] font-medium transition-colors capitalize"
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
