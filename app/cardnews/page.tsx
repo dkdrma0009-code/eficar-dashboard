@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useCallback, useMemo } from 'react';
-import type { CardItem, CardRatio } from './types';
+import type { CardItem, CardRatio, CoverData, BigNumberData, BeforeAfterData, ListData, CustomerCaseData, TimelineData, QuoteData, CTAData } from './types';
 import { RATIO_HEIGHT, CARD_WIDTH } from './types';
 import CardForm from './components/CardForm';
 import type { KpiPreset } from './components/CardForm';
@@ -52,6 +52,10 @@ export default function CardNewsPage() {
       targetCustomer: view.mvpCustomer?.name,
     };
   }, [dashboardData]);
+
+  const updateCard = useCallback(<T extends CardItem['data']>(index: number, patch: Partial<T>) => {
+    setCards(prev => prev.map((c, i) => i === index ? { ...c, data: { ...c.data, ...patch } } as CardItem : c));
+  }, []);
 
   const handleGenerate = useCallback(async (input: CardFormInput) => {
     setLoading(true);
@@ -289,6 +293,22 @@ export default function CardNewsPage() {
                 </div>
               </div>
             </div>
+
+            {/* Inline editor panel */}
+            {cards[selectedCard] && (
+              <div className="w-72 flex-shrink-0">
+                <div className="sticky top-24 bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+                  <div className="flex items-center gap-2 mb-4">
+                    <div className="w-2 h-2 rounded-full bg-[#005957]" />
+                    <span className="text-sm font-bold text-gray-700">카드 편집</span>
+                    <span className="ml-auto text-xs text-gray-400 capitalize bg-gray-100 px-2 py-0.5 rounded-full">
+                      {cards[selectedCard].layout}
+                    </span>
+                  </div>
+                  <CardEditor card={cards[selectedCard]} index={selectedCard} updateCard={updateCard} />
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -401,4 +421,142 @@ export default function CardNewsPage() {
       `}</style>
     </div>
   );
+}
+
+/* ── Inline Card Editor ─────────────────────────────────────────────────────── */
+
+const INPUT_CLS = 'w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#005957] bg-white resize-none';
+const LABEL_CLS = 'block text-xs font-semibold text-gray-500 mb-1 mt-3 first:mt-0';
+
+function Field({ label, value, onChange, multiline }: {
+  label: string; value: string; onChange: (v: string) => void; multiline?: boolean;
+}) {
+  return (
+    <div>
+      <label className={LABEL_CLS}>{label}</label>
+      {multiline ? (
+        <textarea className={INPUT_CLS} value={value} rows={2} onChange={e => onChange(e.target.value)} />
+      ) : (
+        <input className={INPUT_CLS} value={value} onChange={e => onChange(e.target.value)} />
+      )}
+    </div>
+  );
+}
+
+function CardEditor({ card, index, updateCard }: {
+  card: CardItem;
+  index: number;
+  updateCard: <T extends CardItem['data']>(index: number, patch: Partial<T>) => void;
+}) {
+  const u = <T extends CardItem['data']>(patch: Partial<T>) => updateCard<T>(index, patch);
+
+  if (card.layout === 'cover') {
+    const d = card.data as CoverData;
+    return (
+      <div className="space-y-0">
+        <Field label="헤드라인" value={d.headline ?? ''} onChange={v => u({ headline: v })} multiline />
+        <Field label="부제목" value={d.subheadline ?? ''} onChange={v => u({ subheadline: v })} />
+        <Field label="핵심 수치" value={d.highlight ?? ''} onChange={v => u({ highlight: v })} />
+        <Field label="배지" value={d.badge ?? ''} onChange={v => u({ badge: v })} />
+      </div>
+    );
+  }
+  if (card.layout === 'big-number') {
+    const d = card.data as BigNumberData;
+    return (
+      <div className="space-y-0">
+        <Field label="수치" value={d.number ?? ''} onChange={v => u({ number: v })} />
+        <Field label="단위" value={d.unit ?? ''} onChange={v => u({ unit: v })} />
+        <Field label="태그" value={d.tag ?? ''} onChange={v => u({ tag: v })} />
+        <Field label="설명" value={d.desc ?? ''} onChange={v => u({ desc: v })} multiline />
+      </div>
+    );
+  }
+  if (card.layout === 'before-after') {
+    const d = card.data as BeforeAfterData;
+    return (
+      <div className="space-y-0">
+        <Field label="헤드라인" value={d.headline ?? ''} onChange={v => u({ headline: v })} />
+        <Field label="A 컬럼" value={d.headerA ?? ''} onChange={v => u({ headerA: v })} />
+        <Field label="B 컬럼" value={d.headerB ?? ''} onChange={v => u({ headerB: v })} />
+        {d.rows.map((row, i) => (
+          <div key={i} className="border border-gray-100 rounded-lg p-2 mt-3">
+            <div className="text-xs font-semibold text-gray-400 mb-1">행 {i + 1}</div>
+            <Field label="항목" value={row.label} onChange={v => u({ rows: d.rows.map((r, j) => j === i ? { ...r, label: v } : r) })} />
+            <Field label="A 값" value={row.a} onChange={v => u({ rows: d.rows.map((r, j) => j === i ? { ...r, a: v } : r) })} />
+            <Field label="B 값" value={row.b} onChange={v => u({ rows: d.rows.map((r, j) => j === i ? { ...r, b: v } : r) })} />
+          </div>
+        ))}
+      </div>
+    );
+  }
+  if (card.layout === 'list') {
+    const d = card.data as ListData;
+    return (
+      <div className="space-y-0">
+        <Field label="헤드라인" value={d.headline ?? ''} onChange={v => u({ headline: v })} />
+        {d.items.map((item, i) => (
+          <div key={i} className="border border-gray-100 rounded-lg p-2 mt-3">
+            <div className="text-xs font-semibold text-gray-400 mb-1">항목 {i + 1}</div>
+            <Field label="제목" value={item.title} onChange={v => u({ items: d.items.map((it, j) => j === i ? { ...it, title: v } : it) })} />
+            <Field label="설명" value={item.desc ?? ''} onChange={v => u({ items: d.items.map((it, j) => j === i ? { ...it, desc: v } : it) })} multiline />
+          </div>
+        ))}
+      </div>
+    );
+  }
+  if (card.layout === 'customer-case') {
+    const d = card.data as CustomerCaseData;
+    return (
+      <div className="space-y-0">
+        <Field label="헤드라인" value={d.headline ?? ''} onChange={v => u({ headline: v })} />
+        {d.cases.map((c, i) => (
+          <div key={i} className="border border-gray-100 rounded-lg p-2 mt-3">
+            <div className="text-xs font-semibold text-gray-400 mb-1">고객사 {i + 1}</div>
+            <Field label="고객사명" value={c.name} onChange={v => u({ cases: d.cases.map((cs, j) => j === i ? { ...cs, name: v } : cs) })} />
+            <Field label="지표명" value={c.metric} onChange={v => u({ cases: d.cases.map((cs, j) => j === i ? { ...cs, metric: v } : cs) })} />
+            <Field label="수치" value={c.number} onChange={v => u({ cases: d.cases.map((cs, j) => j === i ? { ...cs, number: v } : cs) })} />
+            <Field label="단위" value={c.unit ?? ''} onChange={v => u({ cases: d.cases.map((cs, j) => j === i ? { ...cs, unit: v } : cs) })} />
+          </div>
+        ))}
+      </div>
+    );
+  }
+  if (card.layout === 'timeline') {
+    const d = card.data as TimelineData;
+    return (
+      <div className="space-y-0">
+        <Field label="헤드라인" value={d.headline ?? ''} onChange={v => u({ headline: v })} />
+        {d.steps.map((step, i) => (
+          <div key={i} className="border border-gray-100 rounded-lg p-2 mt-3">
+            <div className="text-xs font-semibold text-gray-400 mb-1">단계 {i + 1}</div>
+            <Field label="제목" value={step.title} onChange={v => u({ steps: d.steps.map((s, j) => j === i ? { ...s, title: v } : s) })} />
+            <Field label="설명" value={step.desc ?? ''} onChange={v => u({ steps: d.steps.map((s, j) => j === i ? { ...s, desc: v } : s) })} multiline />
+          </div>
+        ))}
+      </div>
+    );
+  }
+  if (card.layout === 'quote') {
+    const d = card.data as QuoteData;
+    return (
+      <div className="space-y-0">
+        <Field label="인용 문구" value={d.quote ?? ''} onChange={v => u({ quote: v })} multiline />
+        <Field label="출처" value={d.attribution ?? ''} onChange={v => u({ attribution: v })} />
+        <Field label="맥락 태그" value={d.context ?? ''} onChange={v => u({ context: v })} />
+      </div>
+    );
+  }
+  if (card.layout === 'cta') {
+    const d = card.data as CTAData;
+    return (
+      <div className="space-y-0">
+        <Field label="헤드라인" value={d.headline ?? ''} onChange={v => u({ headline: v })} multiline />
+        <Field label="부제목" value={d.subheadline ?? ''} onChange={v => u({ subheadline: v })} />
+        <Field label="이메일" value={d.contact1 ?? ''} onChange={v => u({ contact1: v })} />
+        <Field label="전화" value={d.contact2 ?? ''} onChange={v => u({ contact2: v })} />
+      </div>
+    );
+  }
+  return null;
 }

@@ -1,19 +1,30 @@
 'use client';
 
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import { Download, Send, ChevronDown, ChevronUp, Smartphone } from 'lucide-react';
+import * as QRCode from 'qrcode';
 import { addSendLog } from '@/lib/sendLogStorage';
 
 /* ─────────────────────────── 타입 ─────────────────────────── */
-type TemplateKey = 'gs25_event' | 'wheel_buyback' | 'epichub_recruit' | 'custom_promo';
+type TemplateKey = 'gs25_event' | 'wheel_buyback' | 'epichub_recruit' | 'custom_promo' | 'brand_promo_a' | 'brand_promo_b';
 
 interface Gs25EventData {
-  partName: string;          // 시트 / 휠 / 헤드램프
-  couponAmount: string;      // 5000 / 3000
-  targetCompany: string;     // SK렌터카 / 롯데렌탈
+  partName: string;
+  damageDesc: string;
+  couponAmount: string;
+  targetCompany: string;
   period: string;
   contactNum: string;
   partnerLogo: 'sk' | 'lotte' | 'none';
+  qrUrl: string;
+  showCoss: boolean;         // COSS 공지사항 포함 여부
+  cossAuthor: string;
+  cossDate: string;
+  cossDept: string;
+  cossTitle: string;
+  cossBodyBefore: string;
+  cossHighlight: string;
+  cossBodyAfter: string;
 }
 interface WheelBuybackData {
   minSize: number;
@@ -38,97 +49,224 @@ interface CustomPromoData {
   contactNum: string;
   bgColor: string;
 }
+interface BrandPromoAData {
+  partnerName: string;
+  partnerLogo: 'sk' | 'lotte' | 'none';
+  headline1: string;
+  headline2: string;
+  subDesc: string;
+  tagline: string;
+  products: { name: string; label: string; icon: '램프' | '휠' | '시트' | '유리' }[];
+  steps: { num: string; title: string; desc: string }[];
+  highlights: { label: string; desc: string }[];
+  contactNum: string;
+  qrUrl: string;
+}
+interface BrandPromoBData {
+  partnerName: string;
+  partnerLogo: 'sk' | 'lotte' | 'none';
+  heroImageBase64: string;
+  accentColor: string;
+  productsLine: string;
+  headline: string;
+  bullets: string[];
+  contactNum: string;
+  qrUrl: string;
+}
 
-/* ─────────────────────── html2canvas 동적 로드 ─────────────────────── */
+/* ─────────────────────── html-to-image 캡처 ─────────────────────── */
 async function captureElement(el: HTMLElement): Promise<string> {
-  const h2c = (await import('html2canvas')).default;
-  const canvas = await h2c(el, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
-  return canvas.toDataURL('image/jpeg', 0.95);
+  const { toJpeg } = await import('html-to-image');
+  await document.fonts.ready;
+  const imgs = Array.from(el.querySelectorAll('img')) as HTMLImageElement[];
+  await Promise.all(imgs.map(img =>
+    img.complete ? Promise.resolve() : new Promise<void>(r => { img.onload = () => r(); img.onerror = () => r(); })
+  ));
+  // cross-origin stylesheet에서 cssRules 접근 시 SecurityError 방지
+  const desc = Object.getOwnPropertyDescriptor(CSSStyleSheet.prototype, 'cssRules');
+  Object.defineProperty(CSSStyleSheet.prototype, 'cssRules', {
+    get() { try { return desc?.get?.call(this) ?? []; } catch { return []; } },
+    configurable: true,
+  });
+  try {
+    const MAX_BYTES = 300 * 1024;
+    let dataUrl = '';
+    for (let q = 0.90; q >= 0.55; q -= 0.05) {
+      dataUrl = await toJpeg(el, { quality: q, pixelRatio: 2, backgroundColor: '#ffffff' });
+      const bytes = Math.round((dataUrl.length - 'data:image/jpeg;base64,'.length) * 3 / 4);
+      if (bytes <= MAX_BYTES) break;
+    }
+    return dataUrl;
+  } finally {
+    if (desc) Object.defineProperty(CSSStyleSheet.prototype, 'cssRules', desc);
+  }
 }
 
 /* ══════════════════════════ 템플릿 컴포넌트들 ══════════════════════════ */
 
 function Gs25EventFlyer({ d }: { d: Gs25EventData }) {
+  const [qrBlobUrl, setQrBlobUrl] = useState('');
+  useEffect(() => {
+    if (!d.qrUrl) { setQrBlobUrl(''); return; }
+    let objectUrl = '';
+    const tmp = document.createElement('canvas');
+    QRCode.toCanvas(tmp, d.qrUrl, { width: 112, margin: 1, color: { dark: '#1A1A2E', light: '#ffffff' } })
+      .then(() => new Promise<string>((res, rej) => tmp.toBlob(b => b ? res(URL.createObjectURL(b)) : rej(), 'image/png')))
+      .then(url => { objectUrl = url; setQrBlobUrl(url); })
+      .catch(() => {});
+    return () => { if (objectUrl) URL.revokeObjectURL(objectUrl); };
+  }, [d.qrUrl]);
+
+  const cossBeforeLines = d.cossBodyBefore.split('\n');
+  const cossAfterLines = d.cossBodyAfter.split('\n');
+  const amt = Number(d.couponAmount).toLocaleString('ko-KR');
+  const Circle = ({ n }: { n: string }) => (
+    <div style={{ width: 36, height: 36, borderRadius: '50%', background: '#005BAC', margin: '0 auto 6px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <span style={{ color: 'white', fontSize: 16, fontWeight: 800, lineHeight: 1 }}>{n}</span>
+    </div>
+  );
   return (
-    <div style={{ width: 480, fontFamily: "'Noto Sans KR', sans-serif", background: '#fff', overflow: 'hidden' }}>
-      {/* 헤더 */}
-      <div style={{ background: 'linear-gradient(135deg, #005BAC 0%, #0077CC 100%)', padding: '28px 24px 20px', textAlign: 'center' }}>
-        <div style={{ display: 'inline-block', background: '#FFD700', borderRadius: 8, padding: '4px 16px', marginBottom: 10 }}>
-          <span style={{ fontSize: 28, fontWeight: 900, color: '#005BAC', letterSpacing: -1 }}>GS25</span>
+    <div style={{ width: 480, height: 1000, fontFamily: 'Arial, sans-serif', background: '#fff', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+
+      {/* ── 헤더 ── */}
+      <div style={{ background: 'linear-gradient(160deg, #005BAC 0%, #1A7DC4 100%)', padding: '10px 24px', textAlign: 'center' }}>
+        <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: '#FFD700', borderRadius: 8, padding: '3px 20px', marginBottom: 7 }}>
+          <span style={{ fontSize: 30, fontWeight: 900, color: '#005BAC', letterSpacing: -1, lineHeight: 1 }}>GS25</span>
         </div>
-        <div style={{ color: 'white', fontSize: 15, fontWeight: 700, marginBottom: 4 }}>에픽카 에서</div>
-        <div style={{ color: 'white', fontSize: 22, fontWeight: 900, lineHeight: 1.3 }}>
-          [{d.partName}] 교체 주문 시<br />
-          <span style={{ color: '#FFD700' }}>GS25 상품권 드려요!</span>
+        <div style={{ color: 'white', fontSize: 16, fontWeight: 800, marginBottom: 7 }}>에픽카 에서</div>
+        <div style={{ display: 'inline-block', background: 'rgba(255,255,255,0.13)', border: '1.5px solid rgba(255,255,255,0.4)', borderRadius: 6, padding: '6px 20px', marginBottom: 9 }}>
+          <span style={{ color: 'white', fontSize: 16, fontWeight: 700 }}>[{d.partName} {d.damageDesc}] 수리 시</span>
+        </div>
+        <div style={{ color: '#FFD700', fontSize: 26, fontWeight: 900, lineHeight: '1.2' }}>
+          GS25 {amt}원 상품권 드려요
         </div>
       </div>
 
-      {/* 프로세스 */}
-      <div style={{ background: '#F0F7FF', padding: '20px 24px' }}>
-        <div style={{ textAlign: 'center', fontSize: 14, fontWeight: 800, color: '#005BAC', marginBottom: 14 }}>
-          주문 시 에픽카에 연락주세요
-        </div>
-        <div style={{ display: 'flex', justifyContent: 'center', gap: 0, alignItems: 'center' }}>
-          {[
-            { num: '1', icon: '🔍', label: '손상 확인', sub: d.targetCompany + ' 차량' },
-            { num: '→', icon: '', label: '', sub: '' },
-            { num: '2', icon: '📞', label: '에픽카 연락', sub: '전화 또는 카카오' },
-            { num: '→', icon: '', label: '', sub: '' },
-            { num: '3', icon: '🎁', label: '상품권 수령', sub: '주문 익일 발송' },
-          ].map((s, i) =>
-            s.icon === '' ? (
-              <div key={i} style={{ color: '#005BAC', fontSize: 18, fontWeight: 700, padding: '0 6px' }}>→</div>
-            ) : (
-              <div key={i} style={{ textAlign: 'center', flex: 1 }}>
-                <div style={{ width: 36, height: 36, borderRadius: '50%', background: '#005BAC', color: 'white', fontSize: 16, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 6px' }}>{s.num}</div>
-                <div style={{ fontSize: 20 }}>{s.icon}</div>
-                <div style={{ fontSize: 12, fontWeight: 700, color: '#191F28' }}>{s.label}</div>
-                <div style={{ fontSize: 10, color: '#6B7280' }}>{s.sub}</div>
-              </div>
-            )
-          )}
-        </div>
+      {/* ── COSS 공지사항 ── */}
+      {d.showCoss && <div style={{ padding: '5px 14px', background: '#FAFAFA', borderBottom: '2px solid #E5E7EB' }}>
+        <div style={{ fontSize: 11, fontWeight: 800, color: '#DC2626', marginBottom: 3 }}>[{d.targetCompany} COSS 공지사항]</div>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11, tableLayout: 'fixed' }}>
+          <colgroup><col style={{ width: 52 }} /><col /><col style={{ width: 54 }} /><col /></colgroup>
+          <tbody>
+            <tr>
+              <td style={{ padding: '3px 7px', background: '#F3F4F6', fontWeight: 700, border: '1px solid #D1D5DB', color: '#374151' }}>작성자</td>
+              <td style={{ padding: '3px 7px', border: '1px solid #D1D5DB', color: '#374151' }}>{d.cossAuthor}</td>
+              <td style={{ padding: '3px 7px', background: '#F3F4F6', fontWeight: 700, border: '1px solid #D1D5DB', color: '#374151' }}>작성일</td>
+              <td style={{ padding: '3px 7px', border: '1px solid #D1D5DB', color: '#374151' }}>{d.cossDate}</td>
+            </tr>
+            <tr>
+              <td style={{ padding: '3px 7px', background: '#F3F4F6', fontWeight: 700, border: '1px solid #D1D5DB', color: '#374151' }}>소속</td>
+              <td colSpan={3} style={{ padding: '3px 7px', border: '1px solid #D1D5DB', color: '#374151' }}>{d.cossDept}</td>
+            </tr>
+            <tr>
+              <td style={{ padding: '3px 7px', background: '#F3F4F6', fontWeight: 700, border: '1px solid #D1D5DB', color: '#374151' }}>제목</td>
+              <td colSpan={3} style={{ padding: '3px 7px', border: '1px solid #D1D5DB', color: '#374151' }}>{d.cossTitle}</td>
+            </tr>
+            <tr>
+              <td style={{ padding: '3px 7px', background: '#F3F4F6', fontWeight: 700, border: '1px solid #D1D5DB', color: '#374151', verticalAlign: 'top' }}>내용</td>
+              <td colSpan={3} style={{ padding: '4px 7px', border: '1px solid #D1D5DB', color: '#374151', lineHeight: '1.5' }}>
+                {cossBeforeLines.map((line, i) => <span key={`b${i}`}>{line}{i < cossBeforeLines.length - 1 && <br />}</span>)}
+                <div style={{ background: '#FEF3C7', border: '1px solid #FDE68A', borderRadius: 3, padding: '4px 9px', margin: '3px 0', fontWeight: 800, fontSize: 13, color: '#92400E', wordBreak: 'keep-all' }}>
+                  {d.cossHighlight}
+                </div>
+                {cossAfterLines.map((line, i) => <span key={`a${i}`}>{line}{i < cossAfterLines.length - 1 && <br />}</span>)}
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>}
+
+      {/* ── 배너 ── */}
+      <div style={{ background: '#1A2E3B', padding: '7px 20px', textAlign: 'center' }}>
+        <span style={{ color: 'white', fontSize: 15, fontWeight: 800 }}>{d.partName}수리 주문 시 에픽카에 연락주세요</span>
       </div>
 
-      {/* 연락처 */}
-      <div style={{ background: '#005957', padding: '16px 24px', display: 'flex', alignItems: 'center', gap: 12 }}>
-        <span style={{ fontSize: 28 }}>📞</span>
-        <div>
-          <div style={{ color: 'white', fontSize: 12, fontWeight: 600 }}>에픽카 대표 번호</div>
-          <div style={{ color: '#7EDCD9', fontSize: 22, fontWeight: 900, letterSpacing: 1 }}>{d.contactNum}</div>
-          <div style={{ color: 'rgba(255,255,255,0.7)', fontSize: 11 }}>전화 또는 카카오톡 채널로 문의</div>
-        </div>
+      {/* ── 프로세스 스텝 (table 기반 — flex 완전 제거) ── */}
+      <div style={{ padding: '9px 20px 8px', background: '#fff' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
+          <tbody>
+            <tr>
+              <td style={{ textAlign: 'center', verticalAlign: 'top', padding: '0 4px' }}>
+                <Circle n="1" />
+                <div style={{ fontSize: 22, marginBottom: 4 }}>🪑</div>
+                <div style={{ fontSize: 12, fontWeight: 700, color: '#191F28' }}>{d.partName} 손상 확인</div>
+                <div style={{ fontSize: 10, color: '#6B7280' }}>{d.targetCompany} 차량 대상</div>
+              </td>
+              <td style={{ textAlign: 'center', verticalAlign: 'top', width: 24, paddingTop: 10 }}>
+                <span style={{ fontSize: 14, color: '#9CA3AF' }}>→</span>
+              </td>
+              <td style={{ textAlign: 'center', verticalAlign: 'top', padding: '0 4px' }}>
+                <Circle n="2" />
+                <div style={{ fontSize: 22, marginBottom: 4 }}>📞</div>
+                <div style={{ fontSize: 12, fontWeight: 700, color: '#191F28' }}>에픽카 연락</div>
+                <div style={{ fontSize: 10, color: '#6B7280' }}>전화 또는 카카오 채널</div>
+              </td>
+              <td style={{ textAlign: 'center', verticalAlign: 'top', width: 24, paddingTop: 10 }}>
+                <span style={{ fontSize: 14, color: '#9CA3AF' }}>→</span>
+              </td>
+              <td style={{ textAlign: 'center', verticalAlign: 'top', padding: '0 4px' }}>
+                <Circle n="3" />
+                <div style={{ fontSize: 22, marginBottom: 4 }}>🎁</div>
+                <div style={{ fontSize: 12, fontWeight: 700, color: '#191F28' }}>상품권 수령</div>
+                <div style={{ fontSize: 10, color: '#6B7280' }}>주문 익일 발송</div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
       </div>
 
-      {/* 이벤트 박스 */}
-      <div style={{ padding: '20px 24px', background: '#fff' }}>
-        <div style={{ textAlign: 'center', background: '#FFD700', borderRadius: 8, padding: '6px 0', fontSize: 16, fontWeight: 900, color: '#1A1A1A', marginBottom: 16 }}>✨ Event</div>
-        <div style={{ fontSize: 15, textAlign: 'center', color: '#191F28', marginBottom: 14, lineHeight: 1.6 }}>
-          {d.partName} 주문 한 건당,<br />
-          <strong style={{ color: '#005957' }}>에픽카가 GS25 {d.couponAmount}원 상품권 쏩니다!</strong>
+      {/* ── 연락처 (table 기반 — flex 완전 제거) ── */}
+      <div style={{ background: '#005957', padding: '10px 20px' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <tbody>
+            <tr>
+              <td style={{ verticalAlign: 'middle', width: 38, fontSize: 24 }}>📞</td>
+              <td style={{ verticalAlign: 'middle', paddingLeft: 8 }}>
+                <div style={{ color: 'rgba(255,255,255,0.8)', fontSize: 11, fontWeight: 600 }}>에픽카 대표 번호</div>
+                <div style={{ color: '#FFD700', fontSize: 24, fontWeight: 900, letterSpacing: 2 }}>{d.contactNum}</div>
+                <div style={{ color: 'rgba(255,255,255,0.65)', fontSize: 10 }}>전화 또는 카카오톡 채널로 문의</div>
+              </td>
+              {qrBlobUrl && (
+                <td style={{ verticalAlign: 'middle', textAlign: 'right', width: 72 }}>
+                  <div style={{ display: 'inline-block', background: 'white', borderRadius: 6, padding: 4 }}>
+                    <img src={qrBlobUrl} width={56} height={56} alt="QR" style={{ display: 'block' }} />
+                  </div>
+                </td>
+              )}
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      {/* ── 이벤트 박스 ── */}
+      <div style={{ padding: '10px 20px', background: '#fff', flex: 1, overflow: 'hidden' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#1A1A2E', borderRadius: 6, padding: '6px 0', fontSize: 15, fontWeight: 900, color: 'white', marginBottom: 10, letterSpacing: 1 }}>
+          <span style={{ lineHeight: 1 }}>Event</span>
+        </div>
+        <div style={{ fontSize: 14, textAlign: 'center', color: '#191F28', marginBottom: 6, lineHeight: '1.6' }}>
+          {d.partName}수리 주문 한 건당,<br />
+          <strong style={{ color: '#005957', fontSize: 24 }}>에픽카가 GS25 {amt}원 상품권 쏩니다!</strong>
         </div>
         {[
           { label: '대상 차량', value: d.targetCompany + ' 차량' },
           { label: '대상 부품', value: d.partName },
+          { label: '기간', value: d.period },
           { label: '전송일', value: '사용건 확인 후 익일' },
         ].map(r => (
-          <div key={r.label} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-            <div style={{ background: '#005957', color: 'white', fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 20, flexShrink: 0 }}>{r.label}</div>
-            <div style={{ fontSize: 13, color: '#374151' }}>{r.value}</div>
+          <div key={r.label} style={{ marginBottom: 4 }}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: '#005957', color: 'white', fontSize: 11, fontWeight: 700, padding: '3px 12px', borderRadius: 20, lineHeight: 1 }}>{r.label}</span>
+            <span style={{ display: 'inline-block', fontSize: 13, color: '#374151', marginLeft: 8, verticalAlign: 'middle' }}>{r.value}</span>
           </div>
         ))}
-        <div style={{ textAlign: 'center', color: '#EF4444', fontSize: 12, fontWeight: 600, marginTop: 10 }}>* 무한대로 수령 가능!</div>
+        <div style={{ textAlign: 'center', color: '#EF4444', fontSize: 12, fontWeight: 600, marginTop: 2 }}>* 무한대로 수령 가능!</div>
       </div>
 
-      {/* 기간 + 하단 */}
-      <div style={{ background: '#F8F9FA', padding: '12px 24px', fontSize: 12, color: '#6B7280' }}>
-        <div>📅 기간: {d.period}</div>
-      </div>
-      <div style={{ background: '#1A1A2E', padding: '14px 24px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 16 }}>
-        {d.partnerLogo === 'sk' && <div style={{ color: 'white', fontSize: 13, fontWeight: 700 }}>SK 렌터카</div>}
-        {d.partnerLogo === 'lotte' && <div style={{ color: 'white', fontSize: 13, fontWeight: 700 }}>롯데렌탈</div>}
-        <img src="/eficar_logo_white.png" alt="에픽카" style={{ height: 20, width: 'auto' }} />
-        <div style={{ color: '#6B7280', fontSize: 11 }}>프로모션 사전 공지 없이 조기 종료될 수 있습니다.</div>
+      {/* ── 하단 ── */}
+      <div style={{ background: '#1A1A2E', padding: '9px 20px', textAlign: 'center' }}>
+        {d.partnerLogo === 'sk' && <span style={{ color: 'white', fontSize: 12, fontWeight: 700, marginRight: 10 }}>SK 렌터카</span>}
+        {d.partnerLogo === 'lotte' && <span style={{ color: 'white', fontSize: 12, fontWeight: 700, marginRight: 10 }}>롯데렌탈</span>}
+        <span style={{ color: 'rgba(255,255,255,0.9)', fontSize: 13, fontWeight: 800, fontStyle: 'italic', marginRight: 10 }}>에픽카</span>
+        <span style={{ color: '#6B7280', fontSize: 10 }}>프로모션 사전 공지 없이 조기 종료될 수 있습니다.</span>
       </div>
     </div>
   );
@@ -195,7 +333,7 @@ function WheelBuybackFlyer({ d }: { d: WheelBuybackData }) {
             { n: '3', label: '신속 입금', sub: '검수 후 처리' },
           ].map(s => (
             <div key={s.n} style={{ textAlign: 'center' }}>
-              <div style={{ width: 32, height: 32, borderRadius: '50%', background: '#005957', color: 'white', fontSize: 14, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 6px' }}>{s.n}</div>
+              <div style={{ width: 32, height: 32, borderRadius: '50%', background: '#005957', color: 'white', fontSize: 14, fontWeight: 800, lineHeight: '32px', textAlign: 'center', margin: '0 auto 6px' }}>{s.n}</div>
               <div style={{ fontSize: 12, fontWeight: 700, color: '#191F28' }}>{s.label}</div>
               <div style={{ fontSize: 10, color: '#6B7280' }}>{s.sub}</div>
             </div>
@@ -231,7 +369,7 @@ function EpichubFlyer({ d }: { d: EpichubData }) {
         <div style={{ fontSize: 15, fontWeight: 800, color: '#191F28', marginBottom: 14 }}>파트너 가입 혜택</div>
         {[d.benefit1, d.benefit2, d.benefit3].filter(Boolean).map((b, i) => (
           <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 10 }}>
-            <div style={{ width: 22, height: 22, borderRadius: '50%', background: '#005957', color: 'white', fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 1 }}>{i + 1}</div>
+            <div style={{ width: 22, height: 22, borderRadius: '50%', background: '#005957', color: 'white', fontSize: 11, fontWeight: 700, lineHeight: '22px', textAlign: 'center', flexShrink: 0, marginTop: 1 }}>{i + 1}</div>
             <div style={{ fontSize: 13, color: '#374151', lineHeight: 1.5 }}>{b}</div>
           </div>
         ))}
@@ -245,7 +383,7 @@ function EpichubFlyer({ d }: { d: EpichubData }) {
           { s: '3', t: '부품 발주 즉시 시작!' },
         ].map(s => (
           <div key={s.s} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 7 }}>
-            <div style={{ width: 20, height: 20, borderRadius: '50%', background: '#005957', color: 'white', fontSize: 10, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{s.s}</div>
+            <div style={{ width: 20, height: 20, borderRadius: '50%', background: '#005957', color: 'white', fontSize: 10, fontWeight: 700, lineHeight: '20px', textAlign: 'center', flexShrink: 0 }}>{s.s}</div>
             <div style={{ fontSize: 12, color: '#374151' }}>{s.t}</div>
           </div>
         ))}
@@ -289,12 +427,258 @@ function CustomPromoFlyer({ d }: { d: CustomPromoData }) {
   );
 }
 
+/* ── 파트너 로고 SVG ── */
+function PartnerLogoSVG({ logo, name }: { logo: 'sk' | 'lotte' | 'none'; name: string }) {
+  if (logo === 'sk') {
+    return (
+      <svg width="60" height="28" viewBox="0 0 60 28" xmlns="http://www.w3.org/2000/svg">
+        <rect width="60" height="28" rx="4" fill="#E8400C" />
+        <text x="13" y="17" fontFamily="Arial,sans-serif" fontWeight="900" fontSize="13" fill="white">SK</text>
+        <text x="32" y="17" fontFamily="Arial,sans-serif" fontWeight="600" fontSize="9" fill="rgba(255,255,255,0.9)">렌터카</text>
+      </svg>
+    );
+  }
+  if (logo === 'lotte') {
+    return (
+      <svg width="60" height="28" viewBox="0 0 60 28" xmlns="http://www.w3.org/2000/svg">
+        <rect width="60" height="28" rx="4" fill="#E60012" />
+        <text x="7" y="17" fontFamily="Arial,sans-serif" fontWeight="900" fontSize="13" fill="white">롯데</text>
+        <text x="34" y="17" fontFamily="Arial,sans-serif" fontWeight="600" fontSize="9" fill="rgba(255,255,255,0.9)">렌탈</text>
+      </svg>
+    );
+  }
+  return <span style={{ fontSize: 12, fontWeight: 700, color: '#374151' }}>{name}</span>;
+}
+
+/* ── 제품 아이콘 SVG ── */
+function ProductIcon({ type }: { type: '램프' | '휠' | '시트' | '유리' }) {
+  if (type === '램프') {
+    return (
+      <svg width="36" height="36" viewBox="0 0 36 36" xmlns="http://www.w3.org/2000/svg">
+        {/* D-shaped headlight body */}
+        <path d="M6 10 Q6 6 10 6 L22 6 Q30 6 30 18 Q30 30 22 30 L10 30 Q6 30 6 26 Z" fill="none" stroke="#1A2E3B" strokeWidth="2.2" />
+        <ellipse cx="16" cy="18" rx="5" ry="5" fill="none" stroke="#1A2E3B" strokeWidth="1.5" />
+        {/* Beam lines */}
+        <line x1="30" y1="14" x2="36" y2="11" stroke="#1A2E3B" strokeWidth="1.5" strokeLinecap="round" />
+        <line x1="30" y1="18" x2="36" y2="18" stroke="#1A2E3B" strokeWidth="1.5" strokeLinecap="round" />
+        <line x1="30" y1="22" x2="36" y2="25" stroke="#1A2E3B" strokeWidth="1.5" strokeLinecap="round" />
+      </svg>
+    );
+  }
+  if (type === '휠') {
+    return (
+      <svg width="36" height="36" viewBox="0 0 36 36" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="18" cy="18" r="15" fill="none" stroke="#1A2E3B" strokeWidth="2.2" />
+        <circle cx="18" cy="18" r="4" fill="none" stroke="#1A2E3B" strokeWidth="1.8" />
+        {/* 5 spokes */}
+        {[0, 72, 144, 216, 288].map((angle, i) => {
+          const rad = (angle - 90) * Math.PI / 180;
+          const x1 = 18 + 4.5 * Math.cos(rad);
+          const y1 = 18 + 4.5 * Math.sin(rad);
+          const x2 = 18 + 13 * Math.cos(rad);
+          const y2 = 18 + 13 * Math.sin(rad);
+          return <line key={i} x1={x1} y1={y1} x2={x2} y2={y2} stroke="#1A2E3B" strokeWidth="1.8" strokeLinecap="round" />;
+        })}
+      </svg>
+    );
+  }
+  if (type === '시트') {
+    return (
+      <svg width="36" height="36" viewBox="0 0 36 36" xmlns="http://www.w3.org/2000/svg">
+        {/* headrest */}
+        <rect x="8" y="3" width="12" height="7" rx="3" fill="none" stroke="#1A2E3B" strokeWidth="2" />
+        {/* backrest */}
+        <rect x="7" y="10" width="14" height="16" rx="3" fill="none" stroke="#1A2E3B" strokeWidth="2" />
+        {/* seat cushion */}
+        <rect x="5" y="25" width="22" height="8" rx="3" fill="none" stroke="#1A2E3B" strokeWidth="2" />
+      </svg>
+    );
+  }
+  // 유리 (windshield trapezoid)
+  return (
+    <svg width="36" height="36" viewBox="0 0 36 36" xmlns="http://www.w3.org/2000/svg">
+      {/* Windshield pentagon shape */}
+      <path d="M8 30 L4 18 L10 7 L26 7 L32 18 L28 30 Z" fill="none" stroke="#1A2E3B" strokeWidth="2.2" strokeLinejoin="round" />
+      {/* wiper line */}
+      <line x1="10" y1="24" x2="22" y2="12" stroke="#1A2E3B" strokeWidth="1.4" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function BrandPromoAFlyer({ d }: { d: BrandPromoAData }) {
+  const [qrBlobUrl, setQrBlobUrl] = useState('');
+  useEffect(() => {
+    if (!d.qrUrl) { setQrBlobUrl(''); return; }
+    let objectUrl = '';
+    const tmp = document.createElement('canvas');
+    QRCode.toCanvas(tmp, d.qrUrl, { width: 80, margin: 1 })
+      .then(() => new Promise<string>((res, rej) => tmp.toBlob(b => b ? res(URL.createObjectURL(b)) : rej(), 'image/png')))
+      .then(url => { objectUrl = url; setQrBlobUrl(url); })
+      .catch(() => {});
+    return () => { if (objectUrl) URL.revokeObjectURL(objectUrl); };
+  }, [d.qrUrl]);
+
+  return (
+    <div style={{ width: 480, fontFamily: "'Pretendard', -apple-system, sans-serif", background: '#fff' }}>
+      {/* ── 헤더: 로고 + 태그라인 ── */}
+      <div style={{ padding: '16px 24px 12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #E5E7EB' }}>
+        <img src="/eficar_logo.png" alt="에픽카" style={{ height: 24, width: 'auto' }} />
+        <span style={{ fontSize: 11, fontWeight: 600, color: '#005957' }}>{d.tagline}</span>
+      </div>
+
+      {/* ── 메인 헤드라인 ── */}
+      <div style={{ padding: '22px 24px 6px' }}>
+        <div style={{ fontSize: 32, fontWeight: 900, color: '#1A2E3B', lineHeight: 1.2, letterSpacing: -0.5 }}>
+          {d.headline1}<br />{d.headline2}
+        </div>
+        <div style={{ fontSize: 12, color: '#4B5563', marginTop: 10, lineHeight: 1.7, whiteSpace: 'pre-line' }}>{d.subDesc}</div>
+      </div>
+
+      {/* ── 얇은 구분선 ── */}
+      <div style={{ margin: '14px 24px', height: 1, background: '#E5E7EB' }} />
+
+      {/* ── 제품 아이콘 행 ── */}
+      <div style={{ padding: '4px 24px 16px', background: '#F8FAFC' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-around' }}>
+          {d.products.map((p) => (
+            <div key={p.name} style={{ textAlign: 'center' }}>
+              <div style={{ width: 60, height: 60, borderRadius: '50%', background: '#E8EAED', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 6px' }}>
+                <ProductIcon type={p.icon} />
+              </div>
+              <div style={{ fontSize: 12, fontWeight: 700, color: '#1A2E3B' }}>{p.name}</div>
+              <div style={{ fontSize: 10, color: '#6B7280', letterSpacing: 0.5 }}>{p.label}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* ── 3단계 프로세스 ── */}
+      <div style={{ padding: '14px 24px', background: '#fff' }}>
+        <div style={{ display: 'flex', gap: 0, justifyContent: 'space-between' }}>
+          {d.steps.map((s) => (
+            <div key={s.num} style={{ flex: 1, padding: '10px 8px', background: '#F8FAFC', borderRadius: 8, textAlign: 'center', margin: '0 4px' }}>
+              <div style={{ fontSize: 11, fontWeight: 800, color: '#005957', marginBottom: 3 }}>{s.num}</div>
+              <div style={{ fontSize: 12, fontWeight: 800, color: '#1A2E3B', marginBottom: 4 }}>{s.title}</div>
+              <div style={{ fontSize: 10, color: '#6B7280', lineHeight: 1.5, whiteSpace: 'pre-line' }}>{s.desc}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* ── 품목별 핵심 ── */}
+      <div style={{ padding: '12px 24px' }}>
+        <div style={{ fontSize: 13, fontWeight: 800, color: '#1A2E3B', marginBottom: 10 }}>
+          {d.products.length}대 품목별 핵심
+        </div>
+        {d.highlights.map((h) => (
+          <div key={h.label} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 8 }}>
+            <span style={{ display: 'inline-block', background: '#005957', color: 'white', fontSize: 10, fontWeight: 700, padding: '2px 10px', borderRadius: 20, whiteSpace: 'nowrap', lineHeight: '16px', flexShrink: 0 }}>{h.label}</span>
+            <span style={{ fontSize: 12, color: '#374151', lineHeight: 1.5 }}>{h.desc}</span>
+          </div>
+        ))}
+      </div>
+
+      {/* ── 하단 연락처 ── */}
+      <div style={{ background: '#1A2E3B', padding: '14px 24px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <PartnerLogoSVG logo={d.partnerLogo} name={d.partnerName} />
+            <span style={{ color: 'rgba(255,255,255,0.5)', fontSize: 14, fontWeight: 300 }}>×</span>
+            <img src="/eficar_logo_white.png" alt="에픽카" style={{ height: 18, width: 'auto' }} />
+          </div>
+          <div style={{ textAlign: 'right' }}>
+            <div style={{ color: '#7EDCD9', fontSize: 20, fontWeight: 900, letterSpacing: 1 }}>{d.contactNum}</div>
+            <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: 10, marginTop: 2 }}>전화 상담·카카오톡 문의</div>
+          </div>
+          {qrBlobUrl && (
+            <div style={{ background: 'white', borderRadius: 6, padding: 3, marginLeft: 10 }}>
+              <img src={qrBlobUrl} width={52} height={52} alt="QR" style={{ display: 'block' }} />
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function BrandPromoBFlyer({ d }: { d: BrandPromoBData }) {
+  const [qrBlobUrl, setQrBlobUrl] = useState('');
+  useEffect(() => {
+    if (!d.qrUrl) { setQrBlobUrl(''); return; }
+    let objectUrl = '';
+    const tmp = document.createElement('canvas');
+    QRCode.toCanvas(tmp, d.qrUrl, { width: 80, margin: 1 })
+      .then(() => new Promise<string>((res, rej) => tmp.toBlob(b => b ? res(URL.createObjectURL(b)) : rej(), 'image/png')))
+      .then(url => { objectUrl = url; setQrBlobUrl(url); })
+      .catch(() => {});
+    return () => { if (objectUrl) URL.revokeObjectURL(objectUrl); };
+  }, [d.qrUrl]);
+
+  const accent = d.accentColor || '#005957';
+
+  return (
+    <div style={{ width: 480, fontFamily: "'Pretendard', -apple-system, sans-serif", background: '#fff' }}>
+      {/* ── 히어로 영역 ── */}
+      {d.heroImageBase64 ? (
+        <img src={d.heroImageBase64} alt="hero" style={{ width: '100%', height: 200, objectFit: 'cover', display: 'block' }} />
+      ) : (
+        <div style={{ width: '100%', height: 200, background: `linear-gradient(135deg, ${accent} 0%, #007A78 100%)`, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ fontSize: 56 }}>🚗</div>
+          <div style={{ color: 'rgba(255,255,255,0.75)', fontSize: 12, marginTop: 6 }}>차량 이미지를 업로드하세요</div>
+        </div>
+      )}
+
+      {/* ── 강조 바 ── */}
+      <div style={{ background: accent, padding: '12px 24px', textAlign: 'center' }}>
+        <span style={{ color: 'white', fontSize: 18, fontWeight: 800 }}>에픽카에게 연락주세요</span>
+      </div>
+
+      {/* ── 중앙 내용 ── */}
+      <div style={{ padding: '24px 32px', textAlign: 'center' }}>
+        <div style={{ fontSize: 18, fontWeight: 800, color: '#1A2E3B', marginBottom: 4 }}>{d.productsLine}</div>
+        <div style={{ fontSize: 22, fontWeight: 900, color: '#1A2E3B', lineHeight: 1.35, marginBottom: 20, whiteSpace: 'pre-line' }}>{d.headline}</div>
+
+        {/* 불릿 포인트 */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 24, textAlign: 'left' }}>
+          {d.bullets.map((b, i) => (
+            <div key={i} style={{ background: '#F8FAFC', borderRadius: 6, padding: '10px 14px', borderLeft: `3px solid ${accent}`, fontSize: 13, color: '#374151' }}>
+              • {b}
+            </div>
+          ))}
+        </div>
+
+        {/* 전화번호 */}
+        <div style={{ fontSize: 32, fontWeight: 900, color: accent, letterSpacing: 1, marginBottom: 4 }}>{d.contactNum}</div>
+        <div style={{ fontSize: 12, color: '#6B7280' }}>전화 상담·카카오톡 문의</div>
+      </div>
+
+      {/* ── 하단 ── */}
+      <div style={{ background: '#1A2E3B', padding: '14px 24px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <PartnerLogoSVG logo={d.partnerLogo} name={d.partnerName} />
+            <span style={{ color: 'rgba(255,255,255,0.5)', fontSize: 14, fontWeight: 300 }}>×</span>
+            <img src="/eficar_logo_white.png" alt="에픽카" style={{ height: 18, width: 'auto' }} />
+          </div>
+          {qrBlobUrl && (
+            <div style={{ background: 'white', borderRadius: 6, padding: 3 }}>
+              <img src={qrBlobUrl} width={52} height={52} alt="QR" style={{ display: 'block' }} />
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ══════════════════════════ 메인 페이지 ══════════════════════════ */
 const TEMPLATES: { key: TemplateKey; label: string; emoji: string; desc: string }[] = [
   { key: 'gs25_event', label: 'GS25 상품권 이벤트', emoji: '🎁', desc: '부품 교체 시 GS25 쿠폰 지급 안내' },
   { key: 'wheel_buyback', label: '휠 매입 가격표', emoji: '🔩', desc: '인치별 매입 가격 안내문' },
   { key: 'epichub_recruit', label: '에픽허브 파트너 모집', emoji: '🏪', desc: '정비소 파트너 가입 안내' },
   { key: 'custom_promo', label: '자유 형식 프로모션', emoji: '✏️', desc: '제목·내용 직접 입력' },
+  { key: 'brand_promo_a', label: '브랜드 홍보물 A형', emoji: '📋', desc: '아이콘 그리드 + 품목 리스트 (SK/롯데)' },
+  { key: 'brand_promo_b', label: '브랜드 홍보물 B형', emoji: '🚗', desc: '차량 사진 hero + 심플 CTA' },
 ];
 
 export default function FlyerPage() {
@@ -305,6 +689,7 @@ export default function FlyerPage() {
 
   // MMS 발송 상태
   const [mmsSubject, setMmsSubject] = useState('');
+  const [mmsText, setMmsText] = useState('');
   const [mmsPhone, setMmsPhone] = useState('');
   const [mmsSending, setMmsSending] = useState(false);
   const [mmsFeedback, setMmsFeedback] = useState('');
@@ -315,8 +700,15 @@ export default function FlyerPage() {
 
   // 각 템플릿 상태
   const [gs25, setGs25] = useState<Gs25EventData>({
-    partName: '시트', couponAmount: '5000', targetCompany: 'SK렌터카',
+    partName: '시트', damageDesc: '에어백 터짐', couponAmount: '5000', targetCompany: 'SK렌터카',
     period: '26.05.01 ~ 26.05.31', contactNum: '010-2752-1054', partnerLogo: 'sk',
+    qrUrl: 'https://pf.kakao.com/_kXxkPG',
+    showCoss: true,
+    cossAuthor: '박준희', cossDate: '2026-05-19', cossDept: '경영지원팀',
+    cossTitle: '에픽카 에코부품(시트) 사용 안내',
+    cossBodyBefore: '안녕하세요, 경영지원팀 박준희입니다.\n항상에서 노고가 많습니다.\n사고정비 업무 관련 공문사항 안내드립니다.',
+    cossHighlight: '금일(5월 19일)부터 사고 항목 품목 중 [시트 교체]가 필요한 건은',
+    cossBodyAfter: '에픽카를 통해 작업 진행 부탁드립니다.\n\n업무에 참고 부탁드리며, 항상 협조해주셔서 감사합니다.',
   });
   const [wheel, setWheel] = useState<WheelBuybackData>({
     minSize: 16, maxSize: 22, priceStep: 5000, basePrice: 35000,
@@ -331,6 +723,43 @@ export default function FlyerPage() {
   });
   const [custom, setCustom] = useState<CustomPromoData>({
     title: '', subtitle: '', desc: '', ctaText: '', contactNum: '010-2752-1054', bgColor: '#005957',
+  });
+  const [brandA, setBrandA] = useState<BrandPromoAData>({
+    partnerName: 'SK렌터카', partnerLogo: 'sk',
+    headline1: '신품처럼', headline2: '더 빠르고 합리적으로.',
+    subDesc: '분해·세척 검사 복원의 표준 공정을 거쳐 신품에 준하는 부품으로,\nSK렌터카 대량 운영 차량을 합리적인 비용과 빠른 수급으로 관리합니다.',
+    tagline: '자동차 사고수리 에이전트',
+    products: [
+      { name: '램프', label: 'LAMP', icon: '램프' },
+      { name: '휠', label: 'WHEEL', icon: '휠' },
+      { name: '시트', label: 'SEAT', icon: '시트' },
+      { name: '유리', label: 'GLASS', icon: '유리' },
+    ],
+    steps: [
+      { num: '01', title: '재재조 부품', desc: '정해진 공정과 검사 기준을\n통과한 부품만 공급' },
+      { num: '02', title: '믿을 수 있는 품질', desc: '신품에 준하는 성능·내구성으로\n상품성 유지' },
+      { num: '03', title: '신속한 공급·시공', desc: '전국 단위 빠른 수급으로\n신속한 공급' },
+    ],
+    highlights: [
+      { label: '램프', desc: '황변 및 파손 헤드램프를 신품 수준으로 복원' },
+      { label: '휠', desc: '신품 교체 대비 비용 절감' },
+      { label: '유리', desc: '전국 단위 빠른 수급으로 운행 공백 최소화' },
+      { label: '시트', desc: '오염·찢김 복원 및 재시공으로 차량 위생·내상 상태 유지' },
+    ],
+    contactNum: '010-2752-1054', qrUrl: 'https://pf.kakao.com/_kXxkPG',
+  });
+  const [brandB, setBrandB] = useState<BrandPromoBData>({
+    partnerName: 'SK렌터카', partnerLogo: 'sk',
+    heroImageBase64: '',
+    accentColor: '#005957',
+    productsLine: '램프·휠·시트',
+    headline: '신속하고 합리적으로\n제공하겠습니다.',
+    bullets: [
+      '정해진 공정과 검사 기준을 통과한 부품만 공급',
+      '신품에 준하는 성능과 내구성으로 상품성 유지',
+      '전국 단위 빠른 수급으로 신속한 공급',
+    ],
+    contactNum: '010-2752-1054', qrUrl: 'https://pf.kakao.com/_kXxkPG',
   });
 
   const handleDownload = useCallback(async () => {
@@ -353,7 +782,7 @@ export default function FlyerPage() {
     const dataUrl = await captureElement(previewRef.current);
     const base64 = dataUrl.split(',')[1];
     const subject = mmsSubject || '에픽카 안내문';
-    const content = `[에픽카] ${subject}\n자세한 내용은 이미지를 확인해 주세요.\n문의: 010-2752-1054`;
+    const content = mmsText.trim() || `[에픽카] ${subject}\n자세한 내용은 이미지를 확인해 주세요.\n문의: 010-2752-1054`;
     const res = await fetch('/api/popbill/sms', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -455,7 +884,7 @@ export default function FlyerPage() {
         </div>
 
         {/* 템플릿 선택 */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10, marginBottom: 24 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 24 }}>
           {TEMPLATES.map(t => (
             <button key={t.key} onClick={() => setSelected(t.key)} style={{
               padding: '12px 14px', borderRadius: 10, border: `2px solid ${selected === t.key ? '#005957' : '#E5E7EB'}`,
@@ -486,10 +915,17 @@ export default function FlyerPage() {
                   </select>
                 </div>
                 <div>
+                  <label style={labelStyle}>손상 유형 (헤더 괄호 안)</label>
+                  <input value={gs25.damageDesc} onChange={e => setGs25(p => ({ ...p, damageDesc: e.target.value }))} style={inputStyle} placeholder="예: 에어백 터짐" />
+                </div>
+                <div>
                   <label style={labelStyle}>상품권 금액 (원)</label>
-                  <select value={gs25.couponAmount} onChange={e => setGs25(p => ({ ...p, couponAmount: e.target.value }))} style={inputStyle}>
-                    {['3000', '5000', '7000', '10000'].map(v => <option key={v}>{v}</option>)}
-                  </select>
+                  <input
+                    value={gs25.couponAmount}
+                    onChange={e => setGs25(p => ({ ...p, couponAmount: e.target.value.replace(/[^0-9]/g, '') }))}
+                    placeholder="예: 5000"
+                    style={inputStyle}
+                  />
                 </div>
                 <div>
                   <label style={labelStyle}>대상 고객사</label>
@@ -504,6 +940,58 @@ export default function FlyerPage() {
                 <div>
                   <label style={labelStyle}>연락처</label>
                   <input value={gs25.contactNum} onChange={e => setGs25(p => ({ ...p, contactNum: e.target.value }))} style={inputStyle} />
+                </div>
+                <div>
+                  <label style={labelStyle}>QR 코드 URL (카카오채널 등)</label>
+                  <input value={gs25.qrUrl} onChange={e => setGs25(p => ({ ...p, qrUrl: e.target.value }))} style={inputStyle} placeholder="https://pf.kakao.com/..." />
+                </div>
+
+                {/* COSS 공지사항 */}
+                <div style={{ paddingTop: 8, borderTop: '1px solid #E5E7EB' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                    <div style={{ fontSize: 12, fontWeight: 800, color: '#1E40AF' }}>COSS 공지사항</div>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
+                      <div onClick={() => setGs25(p => ({ ...p, showCoss: !p.showCoss }))}
+                        style={{ width: 36, height: 20, borderRadius: 10, background: gs25.showCoss ? '#005957' : '#D1D5DB', position: 'relative', transition: 'background 0.2s', cursor: 'pointer' }}>
+                        <div style={{ position: 'absolute', top: 2, left: gs25.showCoss ? 18 : 2, width: 16, height: 16, borderRadius: '50%', background: 'white', transition: 'left 0.2s' }} />
+                      </div>
+                      <span style={{ fontSize: 11, color: gs25.showCoss ? '#005957' : '#9CA3AF', fontWeight: 600 }}>{gs25.showCoss ? '포함' : '미포함'}</span>
+                    </label>
+                  </div>
+                  {gs25.showCoss && <>
+                  <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+                    <div style={{ flex: 1 }}>
+                      <label style={labelStyle}>작성자</label>
+                      <input value={gs25.cossAuthor} onChange={e => setGs25(p => ({ ...p, cossAuthor: e.target.value }))} style={inputStyle} />
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <label style={labelStyle}>작성일</label>
+                      <input value={gs25.cossDate} onChange={e => setGs25(p => ({ ...p, cossDate: e.target.value }))} style={inputStyle} placeholder="YYYY-MM-DD" />
+                    </div>
+                  </div>
+                  <div style={{ marginBottom: 8 }}>
+                    <label style={labelStyle}>소속</label>
+                    <input value={gs25.cossDept} onChange={e => setGs25(p => ({ ...p, cossDept: e.target.value }))} style={inputStyle} />
+                  </div>
+                  <div style={{ marginBottom: 8 }}>
+                    <label style={labelStyle}>제목</label>
+                    <input value={gs25.cossTitle} onChange={e => setGs25(p => ({ ...p, cossTitle: e.target.value }))} style={inputStyle} />
+                  </div>
+                  <div style={{ marginBottom: 8 }}>
+                    <label style={labelStyle}>본문 (하이라이트 앞)</label>
+                    <textarea value={gs25.cossBodyBefore} onChange={e => setGs25(p => ({ ...p, cossBodyBefore: e.target.value }))}
+                      style={{ ...inputStyle, height: 64, resize: 'vertical' }} />
+                  </div>
+                  <div style={{ marginBottom: 8 }}>
+                    <label style={{ ...labelStyle, color: '#92400E' }}>🟡 하이라이트 문구 (강조 표시)</label>
+                    <input value={gs25.cossHighlight} onChange={e => setGs25(p => ({ ...p, cossHighlight: e.target.value }))} style={{ ...inputStyle, background: '#FEF9C3' }} />
+                  </div>
+                  <div>
+                    <label style={labelStyle}>본문 (하이라이트 뒤)</label>
+                    <textarea value={gs25.cossBodyAfter} onChange={e => setGs25(p => ({ ...p, cossBodyAfter: e.target.value }))}
+                      style={{ ...inputStyle, height: 64, resize: 'vertical' }} />
+                  </div>
+                  </>}
                 </div>
               </div>
             )}
@@ -581,6 +1069,127 @@ export default function FlyerPage() {
               </div>
             )}
 
+            {expanded && selected === 'brand_promo_a' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <div>
+                  <label style={labelStyle}>파트너 로고</label>
+                  <select value={brandA.partnerLogo} onChange={e => setBrandA(p => ({ ...p, partnerLogo: e.target.value as 'sk' | 'lotte' | 'none', partnerName: e.target.value === 'sk' ? 'SK렌터카' : e.target.value === 'lotte' ? '롯데렌탈' : p.partnerName }))} style={inputStyle}>
+                    <option value="sk">SK렌터카</option>
+                    <option value="lotte">롯데렌탈</option>
+                    <option value="none">없음</option>
+                  </select>
+                </div>
+                <div>
+                  <label style={labelStyle}>헤드라인 1번째 줄</label>
+                  <input value={brandA.headline1} onChange={e => setBrandA(p => ({ ...p, headline1: e.target.value }))} style={inputStyle} />
+                </div>
+                <div>
+                  <label style={labelStyle}>헤드라인 2번째 줄</label>
+                  <input value={brandA.headline2} onChange={e => setBrandA(p => ({ ...p, headline2: e.target.value }))} style={inputStyle} />
+                </div>
+                <div>
+                  <label style={labelStyle}>설명 문구 (줄바꿈 가능)</label>
+                  <textarea value={brandA.subDesc} onChange={e => setBrandA(p => ({ ...p, subDesc: e.target.value }))}
+                    style={{ ...inputStyle, height: 72, resize: 'vertical' }} />
+                </div>
+                <div style={{ paddingTop: 6, borderTop: '1px solid #E5E7EB' }}>
+                  <div style={{ fontSize: 12, fontWeight: 800, color: '#374151', marginBottom: 8 }}>3단계 프로세스</div>
+                  {brandA.steps.map((s, i) => (
+                    <div key={i} style={{ marginBottom: 8 }}>
+                      <label style={{ ...labelStyle, color: '#005957' }}>Step {s.num}</label>
+                      <input value={s.title} onChange={e => setBrandA(p => { const steps = [...p.steps]; steps[i] = { ...steps[i], title: e.target.value }; return { ...p, steps }; })}
+                        style={{ ...inputStyle, marginBottom: 4 }} placeholder="제목" />
+                      <textarea value={s.desc} onChange={e => setBrandA(p => { const steps = [...p.steps]; steps[i] = { ...steps[i], desc: e.target.value }; return { ...p, steps }; })}
+                        style={{ ...inputStyle, height: 48, resize: 'vertical' }} placeholder="설명 (줄바꿈 가능)" />
+                    </div>
+                  ))}
+                </div>
+                <div style={{ paddingTop: 6, borderTop: '1px solid #E5E7EB' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                    <div style={{ fontSize: 12, fontWeight: 800, color: '#374151' }}>품목별 핵심</div>
+                    <button onClick={() => setBrandA(p => ({ ...p, highlights: [...p.highlights, { label: '', desc: '' }] }))}
+                      style={{ fontSize: 11, fontWeight: 700, color: '#005957', background: '#E6F2F2', border: '1px solid #A7F3D0', borderRadius: 6, padding: '3px 10px', cursor: 'pointer' }}>
+                      + 추가
+                    </button>
+                  </div>
+                  {brandA.highlights.map((h, i) => (
+                    <div key={i} style={{ display: 'flex', gap: 6, marginBottom: 6, alignItems: 'flex-start' }}>
+                      <input value={h.label} onChange={e => setBrandA(p => { const highlights = [...p.highlights]; highlights[i] = { ...highlights[i], label: e.target.value }; return { ...p, highlights }; })}
+                        style={{ ...inputStyle, width: 60, flexShrink: 0 }} placeholder="라벨" />
+                      <input value={h.desc} onChange={e => setBrandA(p => { const highlights = [...p.highlights]; highlights[i] = { ...highlights[i], desc: e.target.value }; return { ...p, highlights }; })}
+                        style={{ ...inputStyle, flex: 1 }} placeholder="설명" />
+                      <button onClick={() => setBrandA(p => ({ ...p, highlights: p.highlights.filter((_, j) => j !== i) }))}
+                        style={{ padding: '6px 8px', borderRadius: 6, border: '1px solid #E5E7EB', background: 'white', color: '#9CA3AF', fontSize: 12, cursor: 'pointer', flexShrink: 0 }}>✕</button>
+                    </div>
+                  ))}
+                </div>
+                <div>
+                  <label style={labelStyle}>연락처</label>
+                  <input value={brandA.contactNum} onChange={e => setBrandA(p => ({ ...p, contactNum: e.target.value }))} style={inputStyle} />
+                </div>
+                <div>
+                  <label style={labelStyle}>QR 코드 URL</label>
+                  <input value={brandA.qrUrl} onChange={e => setBrandA(p => ({ ...p, qrUrl: e.target.value }))} style={inputStyle} placeholder="https://pf.kakao.com/..." />
+                </div>
+              </div>
+            )}
+
+            {expanded && selected === 'brand_promo_b' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <div>
+                  <label style={labelStyle}>파트너 로고</label>
+                  <select value={brandB.partnerLogo} onChange={e => setBrandB(p => ({ ...p, partnerLogo: e.target.value as 'sk' | 'lotte' | 'none', partnerName: e.target.value === 'sk' ? 'SK렌터카' : e.target.value === 'lotte' ? '롯데렌탈' : p.partnerName }))} style={inputStyle}>
+                    <option value="sk">SK렌터카</option>
+                    <option value="lotte">롯데렌탈</option>
+                    <option value="none">없음</option>
+                  </select>
+                </div>
+                <div>
+                  <label style={labelStyle}>히어로 이미지 업로드</label>
+                  <input type="file" accept="image/*" onChange={e => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    const reader = new FileReader();
+                    reader.onload = (ev) => setBrandB(p => ({ ...p, heroImageBase64: ev.target?.result as string }));
+                    reader.readAsDataURL(file);
+                  }} style={{ ...inputStyle, padding: '5px 10px' }} />
+                  {brandB.heroImageBase64 && (
+                    <button onClick={() => setBrandB(p => ({ ...p, heroImageBase64: '' }))}
+                      style={{ marginTop: 4, fontSize: 11, fontWeight: 600, color: '#EF4444', background: 'white', border: '1px solid #FCA5A5', borderRadius: 6, padding: '2px 10px', cursor: 'pointer' }}>
+                      이미지 제거
+                    </button>
+                  )}
+                </div>
+                <div>
+                  <label style={labelStyle}>제품 라인 (상단 작은 텍스트)</label>
+                  <input value={brandB.productsLine} onChange={e => setBrandB(p => ({ ...p, productsLine: e.target.value }))} style={inputStyle} placeholder="예: 램프·휠·시트" />
+                </div>
+                <div>
+                  <label style={labelStyle}>헤드라인 (줄바꿈 가능)</label>
+                  <textarea value={brandB.headline} onChange={e => setBrandB(p => ({ ...p, headline: e.target.value }))}
+                    style={{ ...inputStyle, height: 60, resize: 'vertical' }} />
+                </div>
+                <div style={{ paddingTop: 6, borderTop: '1px solid #E5E7EB' }}>
+                  <div style={{ fontSize: 12, fontWeight: 800, color: '#374151', marginBottom: 8 }}>불릿 포인트 (3개)</div>
+                  {brandB.bullets.map((b, i) => (
+                    <div key={i} style={{ marginBottom: 6 }}>
+                      <label style={labelStyle}>포인트 {i + 1}</label>
+                      <textarea value={b} onChange={e => setBrandB(p => { const bullets = [...p.bullets]; bullets[i] = e.target.value; return { ...p, bullets }; })}
+                        style={{ ...inputStyle, height: 48, resize: 'vertical' }} />
+                    </div>
+                  ))}
+                </div>
+                <div>
+                  <label style={labelStyle}>연락처</label>
+                  <input value={brandB.contactNum} onChange={e => setBrandB(p => ({ ...p, contactNum: e.target.value }))} style={inputStyle} />
+                </div>
+                <div>
+                  <label style={labelStyle}>QR 코드 URL</label>
+                  <input value={brandB.qrUrl} onChange={e => setBrandB(p => ({ ...p, qrUrl: e.target.value }))} style={inputStyle} placeholder="https://pf.kakao.com/..." />
+                </div>
+              </div>
+            )}
+
             {/* 다운로드 버튼 */}
             <button onClick={handleDownload} disabled={downloading}
               style={{ marginTop: 20, width: '100%', padding: '11px', borderRadius: 8, border: '1px solid #D1D5DB', background: 'white', color: '#374151', fontSize: 13, fontWeight: 600, cursor: downloading ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: downloading ? 0.7 : 1 }}>
@@ -606,6 +1215,50 @@ export default function FlyerPage() {
               <input value={mmsSubject} onChange={e => setMmsSubject(e.target.value)}
                 placeholder="MMS 제목 (예: GS25 시트 교환 이벤트 안내)"
                 style={{ width: '100%', padding: '8px 10px', border: '1px solid #E5E7EB', borderRadius: 7, fontSize: 13, fontFamily: 'inherit', marginBottom: 8, background: 'white', outline: 'none', boxSizing: 'border-box' }} />
+
+              {/* MMS 문구 */}
+              <div style={{ marginBottom: 8 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: '#6B7280' }}>MMS 문구</span>
+                  {selected === 'gs25_event' && (
+                    <button
+                      onClick={() => {
+                        const d = gs25;
+                        const amt = Number(d.couponAmount).toLocaleString('ko-KR');
+                        setMmsText(
+`[${d.targetCompany} 협력 정비소 안내]
+안녕하세요,
+${d.targetCompany} 협력 정비소 담당자님!
+
+1. 담당자님을 위한 '무제한' 증정 이벤트
+■ 혜택: 에픽카 '${d.partName} ${d.damageDesc} 수리 시' 1건당 ☞ GS25 ${amt}원권 ☜ 100% 증정
+■ 한도: 제한 없음
+■ 지급: 부품 사용 확인 후 익일 즉시 발송
+
+2. 참여 방법 (아주 간단합니다!)
+아래 번호를 통해 에픽카로 ${d.targetCompany} 차량 ${d.partName}수리 요청하시면 됩니다.
+☏빠른 전화/문자: ${d.contactNum}
+＠카카오톡 채널 [에픽카_정비소]: ${d.qrUrl}
+☞ 이벤트 기간: ${d.period}
+☞ 프로모션은 사전 공지 없이 조기 종료될 수 있습니다.
+업무로 바쁘신 와중에도 협조해 주셔서 감사합니다.
+오늘 하루도 안전하고 활기찬 하루 보내세요!`
+                        );
+                      }}
+                      style={{ fontSize: 11, fontWeight: 700, color: '#005957', background: '#E6F2F2', border: '1px solid #A7F3D0', borderRadius: 6, padding: '3px 10px', cursor: 'pointer' }}
+                    >
+                      ✨ 자동 생성
+                    </button>
+                  )}
+                </div>
+                <textarea
+                  value={mmsText}
+                  onChange={e => setMmsText(e.target.value)}
+                  placeholder="문구를 직접 입력하거나 '자동 생성' 버튼을 누르세요."
+                  rows={8}
+                  style={{ width: '100%', padding: '8px 10px', border: '1px solid #E5E7EB', borderRadius: 7, fontSize: 12, fontFamily: 'inherit', background: 'white', outline: 'none', resize: 'vertical', boxSizing: 'border-box', lineHeight: 1.6 }}
+                />
+              </div>
 
               {/* 단건 발송 */}
               <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
@@ -694,6 +1347,8 @@ export default function FlyerPage() {
                 {selected === 'wheel_buyback' && <WheelBuybackFlyer d={wheel} />}
                 {selected === 'epichub_recruit' && <EpichubFlyer d={hub} />}
                 {selected === 'custom_promo' && <CustomPromoFlyer d={custom} />}
+                {selected === 'brand_promo_a' && <BrandPromoAFlyer d={brandA} />}
+                {selected === 'brand_promo_b' && <BrandPromoBFlyer d={brandB} />}
               </div>
             </div>
           </div>
