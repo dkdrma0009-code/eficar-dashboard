@@ -10,6 +10,7 @@ import ExportBar from './components/ExportBar';
 import type { CardFormInput } from './types';
 import { useDashboardData } from '@/lib/DataContext';
 import { computeViewData, formatCurrency, formatPercent } from '@/lib/dataUtils';
+import type { HtmlCard } from '@/app/api/ai-generate-html/route';
 
 type Stage = 'form' | 'preview' | 'export';
 
@@ -23,6 +24,8 @@ const RATIO_OPTIONS: { label: string; value: CardRatio; desc: string }[] = [
 export default function CardNewsPage() {
   const [stage, setStage] = useState<Stage>('form');
   const [cards, setCards] = useState<CardItem[]>([]);
+  const [htmlCards, setHtmlCards] = useState<HtmlCard[]>([]);
+  const [htmlMode, setHtmlMode] = useState(true); // AI 직접 디자인 모드
   const [ratio, setRatio] = useState<CardRatio>('1:1');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -101,7 +104,8 @@ export default function CardNewsPage() {
     setError('');
     setCurrentInput(input);
     try {
-      const res = await fetch('/api/ai-generate', {
+      const endpoint = htmlMode ? '/api/ai-generate-html' : '/api/ai-generate';
+      const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(input),
@@ -111,7 +115,13 @@ export default function CardNewsPage() {
         setError(data.error ?? '생성 중 오류가 발생했습니다.');
         return;
       }
-      setCards(data.cards ?? []);
+      if (htmlMode) {
+        setHtmlCards(data.cards ?? []);
+        setCards([]);
+      } else {
+        setCards(data.cards ?? []);
+        setHtmlCards([]);
+      }
       setSelectedCard(0);
       setStage('preview');
     } catch (e) {
@@ -119,7 +129,7 @@ export default function CardNewsPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [htmlMode]);
 
   const cardWidth = CARD_WIDTH;
   const cardHeight = Math.round(cardWidth * RATIO_HEIGHT[ratio]);
@@ -209,9 +219,25 @@ export default function CardNewsPage() {
             )}
             <CardForm onSubmit={handleGenerate} loading={loading} kpiPreset={kpiPreset} />
           </div>
-          <div className="mt-6 grid grid-cols-3 gap-4">
+          {/* 모드 선택 */}
+          <div className="mt-4 flex items-center gap-3 bg-white rounded-xl border border-gray-100 p-4">
+            <span className="text-sm font-semibold text-gray-600">생성 방식:</span>
+            <button
+              onClick={() => setHtmlMode(true)}
+              className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${htmlMode ? 'bg-[#005957] text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+            >
+              ✦ AI 직접 디자인
+            </button>
+            <button
+              onClick={() => setHtmlMode(false)}
+              className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${!htmlMode ? 'bg-[#005957] text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+            >
+              템플릿 방식
+            </button>
+          </div>
+          <div className="mt-4 grid grid-cols-3 gap-4">
             {[
-              { num: '8', label: '레이아웃 타입' },
+              { num: '∞', label: 'AI 직접 디자인' },
               { num: '4', label: '비율 프리셋' },
               { num: '5', label: '내보내기 형식' },
             ].map(({ num, label }) => (
@@ -224,8 +250,79 @@ export default function CardNewsPage() {
         </div>
       )}
 
-      {/* ── PREVIEW ── */}
-      {stage === 'preview' && cards.length > 0 && (
+      {/* ── PREVIEW (HTML 모드) ── */}
+      {stage === 'preview' && htmlMode && htmlCards.length > 0 && (
+        <div className="max-w-7xl mx-auto px-6 py-8">
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <h2 className="text-xl font-bold text-gray-900">카드뉴스 미리보기 <span className="text-xs bg-[#005957] text-white px-2 py-0.5 rounded-full ml-2">AI 직접 디자인</span></h2>
+              <p className="text-sm text-gray-500 mt-0.5">총 {htmlCards.length}장</p>
+            </div>
+            <div className="flex items-center gap-3">
+              <button onClick={() => setStage('form')} className="text-sm text-gray-500 hover:text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-100 transition-colors">← 다시 입력</button>
+            </div>
+          </div>
+
+          <div className="flex gap-6">
+            {/* Thumbnail strip */}
+            <div className="flex flex-col gap-3 overflow-y-auto" style={{ maxHeight: '80vh', width: 340, flexShrink: 0 }}>
+              {htmlCards.map((card, i) => (
+                <button
+                  key={i}
+                  onClick={() => setSelectedCard(i)}
+                  className={`relative rounded-xl overflow-hidden transition-all text-left ${selectedCard === i ? 'ring-2 ring-[#005957] shadow-lg' : 'ring-1 ring-gray-200 hover:ring-gray-400'}`}
+                  style={{ width: 320, height: 320, flexShrink: 0, background: '#f5f5f5' }}
+                >
+                  <div style={{ width: 540, height: 540, transformOrigin: 'top left', transform: `scale(${320/540})` }}
+                    dangerouslySetInnerHTML={{ __html: card.html }} />
+                  <div style={{ position: 'absolute', top: 8, left: 8, background: 'rgba(0,0,0,0.5)', color: '#fff', fontSize: 11, fontWeight: 700, borderRadius: 4, padding: '2px 6px' }}>
+                    {i + 1}/{htmlCards.length}
+                  </div>
+                  <div style={{ position: 'absolute', bottom: 8, left: 8, background: 'rgba(0,0,0,0.4)', color: '#fff', fontSize: 11, borderRadius: 4, padding: '2px 6px' }}>
+                    {card.type}
+                  </div>
+                </button>
+              ))}
+            </div>
+
+            {/* Large preview */}
+            <div className="flex-1 flex flex-col items-center">
+              <div className="sticky top-24">
+                <div className="rounded-2xl overflow-hidden shadow-xl" style={{ width: 540, height: 540 }}>
+                  {htmlCards[selectedCard] && (
+                    <div dangerouslySetInnerHTML={{ __html: htmlCards[selectedCard].html }} />
+                  )}
+                </div>
+                <p className="mt-3 text-center text-sm text-gray-500">
+                  {selectedCard + 1} / {htmlCards.length} · {htmlCards[selectedCard]?.type}
+                </p>
+                <div className="flex items-center justify-center gap-3 mt-3">
+                  <button onClick={() => setSelectedCard(i => Math.max(0, i - 1))} disabled={selectedCard === 0}
+                    className="px-4 py-2 rounded-lg bg-gray-100 text-gray-600 text-sm font-semibold disabled:opacity-30 hover:bg-gray-200 transition-colors">← 이전</button>
+                  <button onClick={() => setSelectedCard(i => Math.min(htmlCards.length - 1, i + 1))} disabled={selectedCard === htmlCards.length - 1}
+                    className="px-4 py-2 rounded-lg bg-gray-100 text-gray-600 text-sm font-semibold disabled:opacity-30 hover:bg-gray-200 transition-colors">다음 →</button>
+                </div>
+
+                {/* HTML 편집 */}
+                <div className="mt-4 bg-white rounded-2xl border border-gray-100 shadow-sm p-4 w-full">
+                  <div className="text-xs font-bold text-gray-500 mb-2">HTML 직접 편집</div>
+                  <textarea
+                    className="w-full text-xs font-mono border border-gray-200 rounded-lg p-2 focus:outline-none focus:ring-1 focus:ring-[#005957] resize-none"
+                    rows={6}
+                    value={htmlCards[selectedCard]?.html ?? ''}
+                    onChange={e => {
+                      setHtmlCards(prev => prev.map((c, i) => i === selectedCard ? { ...c, html: e.target.value } : c));
+                    }}
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── PREVIEW (템플릿 모드) ── */}
+      {stage === 'preview' && !htmlMode && cards.length > 0 && (
         <div className="max-w-7xl mx-auto px-6 py-8">
           <div className="flex items-center justify-between mb-6">
             <div>
