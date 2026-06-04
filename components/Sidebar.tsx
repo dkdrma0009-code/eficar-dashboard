@@ -10,9 +10,24 @@ import {
   Zap, LayoutDashboard, Users, FileText, Sparkles,
   Image, BarChart2, Send, Calendar, BookOpen,
   GitCompare, Upload, Newspaper, History, Contact, Bell, Clock,
+  ChevronDown, ChevronRight,
 } from 'lucide-react';
 
-const SECTIONS = [
+type NavItem = {
+  href: string;
+  label: string;
+  icon: React.ComponentType<{ style?: React.CSSProperties }>;
+  exact?: boolean;
+  alert?: boolean;
+  children?: NavItem[];
+};
+
+type NavSection = {
+  label: string;
+  items: NavItem[];
+};
+
+const SECTIONS: NavSection[] = [
   {
     label: '분석',
     items: [
@@ -23,13 +38,17 @@ const SECTIONS = [
   {
     label: 'AI 생성',
     items: [
-      { href: '/proposal',   label: 'AI 제안서',    icon: FileText },
-      { href: '/content',    label: '콘텐츠 생성',  icon: Sparkles },
-      { href: '/cardnews',   label: '카드뉴스',     icon: Image },
-      { href: '/flyer',      label: '안내문 생성',  icon: Newspaper },
-      { href: '/targeting',  label: '타겟 메시지',  icon: Users },
-      { href: '/promo',      label: '정비소 프로모', icon: Newspaper },
-      { href: '/report',     label: '월간 보고서',  icon: BarChart2 },
+      { href: '/proposal',  label: 'AI 제안서',   icon: FileText },
+      {
+        href: '/content', label: '콘텐츠 생성', icon: Sparkles,
+        children: [
+          { href: '/cardnews', label: '카드뉴스',       icon: Image },
+          { href: '/flyer',    label: '안내문 생성',    icon: Newspaper },
+          { href: '/promo',    label: '정비소 프로모션', icon: Newspaper },
+        ],
+      },
+      { href: '/targeting', label: '타겟 메시지', icon: Users },
+      { href: '/report',    label: '월간 보고서', icon: BarChart2 },
     ],
   },
   {
@@ -49,7 +68,7 @@ const SECTIONS = [
       { href: '/compare', label: '고객사 비교', icon: GitCompare },
     ],
   },
-] as const;
+];
 
 export default function Sidebar() {
   const pathname = usePathname();
@@ -86,6 +105,70 @@ export default function Sidebar() {
     return pathname.startsWith(href);
   };
 
+  // 서브메뉴 열림 상태 — 자식 경로가 활성이면 자동 열림
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+
+  const isChildActive = (item: NavItem) =>
+    item.children?.some(c => isActive(c.href)) ?? false;
+
+  const isOpen = (item: NavItem) =>
+    expanded[item.href] !== undefined ? expanded[item.href] : isChildActive(item);
+
+  function NavLink({ item, depth = 0 }: { item: NavItem; depth?: number }) {
+    const active = isActive(item.href, item.exact);
+    const hasChildren = !!item.children?.length;
+    const open = hasChildren && isOpen(item);
+    const Icon = item.icon;
+    const showAlert = item.alert && alertCount > 0;
+
+    if (hasChildren) {
+      return (
+        <div>
+          <button
+            onClick={() => setExpanded(p => ({ ...p, [item.href]: !isOpen(item) }))}
+            style={{
+              width: '100%', display: 'flex', alignItems: 'center', gap: 8,
+              padding: `6px 8px`, borderRadius: 7, background: 'none', border: 'none', cursor: 'pointer',
+              color: isChildActive(item) ? '#005957' : '#4A5568',
+              fontWeight: isChildActive(item) ? 700 : 500, fontSize: 13,
+              marginBottom: 1, textAlign: 'left',
+            }}
+          >
+            <Icon style={{ width: 14, height: 14, flexShrink: 0, opacity: isChildActive(item) ? 1 : 0.65 }} />
+            <span style={{ flex: 1 }}>{item.label}</span>
+            {open
+              ? <ChevronDown style={{ width: 12, height: 12, opacity: 0.5 }} />
+              : <ChevronRight style={{ width: 12, height: 12, opacity: 0.5 }} />}
+          </button>
+          {open && (
+            <div style={{ marginLeft: 10, borderLeft: '2px solid #E8F5F2', paddingLeft: 8, marginBottom: 2 }}>
+              {item.children!.map(child => <NavLink key={child.href} item={child} depth={depth + 1} />)}
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    return (
+      <Link href={item.href} style={{
+        display: 'flex', alignItems: 'center', gap: 8,
+        padding: `6px 8px`, borderRadius: 7, textDecoration: 'none',
+        background: active ? '#E6F2F2' : 'transparent',
+        color: active ? '#005957' : '#4A5568',
+        fontWeight: active ? 700 : 500, fontSize: depth > 0 ? 12 : 13,
+        marginBottom: 1, transition: 'background 0.1s',
+      }}>
+        <Icon style={{ width: 14, height: 14, flexShrink: 0, opacity: active ? 1 : 0.65 }} />
+        <span style={{ flex: 1 }}>{item.label}</span>
+        {showAlert && (
+          <span style={{ fontSize: 10, fontWeight: 700, background: '#FEE2E2', color: '#DC2626', borderRadius: 10, padding: '1px 6px', lineHeight: '16px' }}>
+            {alertCount}
+          </span>
+        )}
+      </Link>
+    );
+  }
+
   return (
     <aside style={{
       width: 232, flexShrink: 0, height: '100vh', position: 'sticky', top: 0,
@@ -115,33 +198,7 @@ export default function Sidebar() {
             }}>
               {section.label}
             </p>
-            {section.items.map(item => {
-              const active = isActive(item.href, 'exact' in item ? item.exact : undefined);
-              const Icon = item.icon;
-              const showAlert = 'alert' in item && item.alert && alertCount > 0;
-              return (
-                <Link key={item.href} href={item.href} style={{
-                  display: 'flex', alignItems: 'center', gap: 8,
-                  padding: '6px 8px', borderRadius: 7, textDecoration: 'none',
-                  background: active ? '#E6F2F2' : 'transparent',
-                  color: active ? '#005957' : '#4A5568',
-                  fontWeight: active ? 700 : 500, fontSize: 13,
-                  marginBottom: 1, transition: 'background 0.1s',
-                }}>
-                  <Icon style={{ width: 14, height: 14, flexShrink: 0, opacity: active ? 1 : 0.65 }} />
-                  <span style={{ flex: 1 }}>{item.label}</span>
-                  {showAlert && (
-                    <span style={{
-                      fontSize: 10, fontWeight: 700,
-                      background: '#FEE2E2', color: '#DC2626',
-                      borderRadius: 10, padding: '1px 6px', lineHeight: '16px',
-                    }}>
-                      {alertCount}
-                    </span>
-                  )}
-                </Link>
-              );
-            })}
+            {section.items.map(item => <NavLink key={item.href} item={item} />)}
           </div>
         ))}
       </nav>
