@@ -10,70 +10,166 @@ const EFICAR_CONTEXT = `에픽카(자동차 대체부품 B2B 솔루션):
 - 제품: 헤드램프, 휠, 에픽커넥트(사고처리 자동화), 에픽렌즈(AI 부품 판독)
 - 연락처: eficar@eficar.co.kr / 010-2752-1054`;
 
+const LOGO = `<div style="display:flex;align-items:center;gap:6px"><div style="width:24px;height:24px;border-radius:6px;background:#005957;display:flex;align-items:center;justify-content:center"><span style="color:#fff;font-weight:900;font-size:13px;line-height:1">∞</span></div><span style="font-weight:800;font-size:14px;color:#191F28;letter-spacing:-0.3px">에픽카</span></div>`;
+const LOGO_WHITE = `<div style="display:flex;align-items:center;gap:6px"><div style="width:24px;height:24px;border-radius:6px;background:rgba(255,255,255,0.25);display:flex;align-items:center;justify-content:center"><span style="color:#fff;font-weight:900;font-size:13px;line-height:1">∞</span></div><span style="font-weight:800;font-size:14px;color:#fff;letter-spacing:-0.3px">에픽카</span></div>`;
+
 const DESIGN_SYSTEM = `
 【에픽카 카드뉴스 디자인 시스템】
-
-카드 크기: 540 × 540px (정방형)
-폰트: 'Pretendard', -apple-system, sans-serif
+카드: 540×540px 정방형. font-family:'Pretendard',-apple-system,sans-serif. 모든 스타일 인라인.
 
 색상:
-- 메인 틸: #005957
-- 밝은 그린(수치 강조): #1CC76E
-- 흰배경: #FFFFFF
-- KPI 타일 배경: #E8F5F2
-- 섹션 배경(초록): #1DBF6E (풀 배경용)
-- 본문 텍스트: #191F28
-- 보조 텍스트: #6B7280
-- 연한 보더: rgba(0,89,87,0.12)
+#005957 메인틸 | #1CC76E 밝은그린 | #E8F5F2 연한틸배경 | #191F28 본문 | #6B7280 보조
 
-【PDF 기반 디자인 패턴 — 이걸 따라라】
+로고(어두운배경): ${LOGO_WHITE}
+로고(밝은배경): ${LOGO}
 
-1. 커버 카드:
-   - 좌측 60%: 흰 배경, 에픽카 로고, 뱃지 칩, 헤드라인(볼드), 부제목
-   - 우측 40%: #005957 배경, 핵심 수치(흰색 초대형), "핵심 성과" 라벨
-   - 상단 4px 틸 바
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+【1. 커버 — 스플릿 레이아웃】예시 HTML:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+<div style="width:540px;height:540px;overflow:hidden;box-sizing:border-box;font-family:'Pretendard',-apple-system,sans-serif;position:relative;background:#fff">
+  <div style="position:absolute;top:0;left:0;right:0;height:4px;background:#005957"></div>
+  <div style="position:absolute;top:0;left:0;bottom:0;width:324px;padding:40px 36px;display:flex;flex-direction:column;justify-content:space-between">
+    <div>${LOGO}</div>
+    <div>
+      <div style="display:inline-block;background:#E8F5F2;border:1px solid rgba(0,89,87,0.2);border-radius:100px;padding:5px 14px;font-size:13px;font-weight:700;color:#005957;margin-bottom:20px">에픽카 솔루션</div>
+      <div style="width:40px;height:3px;background:#005957;border-radius:2px;margin-bottom:16px"></div>
+      <div style="font-size:42px;font-weight:900;color:#191F28;line-height:1.15;letter-spacing:-0.025em">부품비를<br>줄이는 방법</div>
+      <div style="font-size:16px;font-weight:500;color:#6B7280;margin-top:14px;line-height:1.5">데이터 기반 대체부품 공급 플랫폼</div>
+    </div>
+    <div style="font-size:12px;color:#9CA3AF;font-weight:600;letter-spacing:0.04em">eficar.co.kr</div>
+  </div>
+  <div style="position:absolute;top:0;right:0;bottom:0;width:216px;background:linear-gradient(145deg,#004745,#005957 50%,#007A77);display:flex;flex-direction:column;align-items:center;justify-content:center">
+    <div style="position:absolute;top:-40px;right:-30px;width:160px;height:160px;border-radius:50%;background:rgba(255,255,255,0.07)"></div>
+    <div style="position:absolute;bottom:-30px;left:-20px;width:120px;height:120px;border-radius:50%;background:rgba(255,255,255,0.05)"></div>
+    <div style="text-align:center;position:relative;z-index:1">
+      <div style="font-size:12px;font-weight:700;color:rgba(255,255,255,0.65);letter-spacing:0.1em;margin-bottom:10px">핵심 성과</div>
+      <div style="font-size:58px;font-weight:900;color:#fff;line-height:0.9;letter-spacing:-0.04em">1.6억</div>
+      <div style="font-size:13px;font-weight:500;color:rgba(255,255,255,0.6);margin-top:10px;line-height:1.4">차량 1만대<br>연간 절감액</div>
+    </div>
+  </div>
+</div>
 
-2. 수치 카드 (KPI):
-   - 흰 배경
-   - 상단: 볼드 헤드라인 (검정+틸 투톤)
-   - 중앙: #E8F5F2 라운드 타일, [태그] 브래킷 라벨(틸), 초대형 수치(#005957), 설명 텍스트
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+【2. KPI 수치 카드】예시 HTML:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+<div style="width:540px;height:540px;overflow:hidden;box-sizing:border-box;font-family:'Pretendard',-apple-system,sans-serif;position:relative;background:#fff">
+  <div style="position:absolute;top:0;left:0;right:0;height:4px;background:#005957"></div>
+  <div style="position:absolute;top:0;left:0;right:0;padding:36px 40px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:32px">
+      ${LOGO}
+      <div style="font-size:12px;font-weight:700;color:#005957;letter-spacing:0.1em">매출 성장</div>
+    </div>
+    <div style="font-size:30px;font-weight:900;color:#191F28;line-height:1.2;letter-spacing:-0.02em;margin-bottom:28px"><span style="color:#191F28">전년 대비 </span><span style="color:#005957">매출 성장률</span></div>
+    <div style="background:#E8F5F2;border-radius:20px;padding:40px;border:1px solid rgba(0,89,87,0.12)">
+      <div style="font-size:14px;font-weight:700;color:#005957;margin-bottom:14px">[전년 대비 매출성장]</div>
+      <div style="font-size:96px;font-weight:900;color:#005957;line-height:0.85;letter-spacing:-0.04em">850%</div>
+      <div style="font-size:16px;font-weight:500;color:#6B7280;margin-top:18px">월평균 성장률 11.3%로 매출 급성장 중</div>
+    </div>
+  </div>
+</div>
 
-3. 고객사 실적 카드:
-   - 흰 배경
-   - 투톤 헤드라인
-   - 2×2 카드 그리드: 회사명, 지표명, 굵은 틸 수치
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+【3. 고객사 실적 카드 — 2×2 그리드】예시 HTML:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+<div style="width:540px;height:540px;overflow:hidden;box-sizing:border-box;font-family:'Pretendard',-apple-system,sans-serif;position:relative;background:#fff;padding:36px 40px">
+  <div style="position:absolute;top:0;left:0;right:0;height:4px;background:#005957"></div>
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">${LOGO}<span style="font-size:12px;color:#6B7280">파트너사 실적</span></div>
+  <div style="font-size:28px;font-weight:900;line-height:1.2;letter-spacing:-0.02em;margin-bottom:24px"><span style="color:#191F28">함께하는 파트너사 </span><span style="color:#005957">실제 성과</span></div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+    <div style="background:#F8FBFA;border:1px solid rgba(0,89,87,0.12);border-radius:14px;padding:20px 22px;display:flex;flex-direction:column;justify-content:space-between;height:140px">
+      <div><div style="font-size:17px;font-weight:800;color:#191F28;margin-bottom:4px">SK렌터카</div><div style="font-size:13px;color:#6B7280">연간 절감액</div></div>
+      <div><div style="font-size:38px;font-weight:900;color:#005957;line-height:0.9;letter-spacing:-0.03em">1.6억</div><div style="font-size:12px;color:#9CA3AF;margin-top:5px">차량 1만대 기준</div></div>
+    </div>
+    <div style="background:#F8FBFA;border:1px solid rgba(0,89,87,0.12);border-radius:14px;padding:20px 22px;display:flex;flex-direction:column;justify-content:space-between;height:140px">
+      <div><div style="font-size:17px;font-weight:800;color:#191F28;margin-bottom:4px">그린카</div><div style="font-size:13px;color:#6B7280">업무 절감률</div></div>
+      <div><div style="font-size:38px;font-weight:900;color:#005957;line-height:0.9;letter-spacing:-0.03em">90%</div><div style="font-size:12px;color:#9CA3AF;margin-top:5px">에픽커넥트 도입 후</div></div>
+    </div>
+    <div style="background:#F8FBFA;border:1px solid rgba(0,89,87,0.12);border-radius:14px;padding:20px 22px;display:flex;flex-direction:column;justify-content:space-between;height:140px">
+      <div><div style="font-size:17px;font-weight:800;color:#191F28;margin-bottom:4px">롯데렌탈</div><div style="font-size:13px;color:#6B7280">공급량 성장률</div></div>
+      <div><div style="font-size:38px;font-weight:900;color:#005957;line-height:0.9;letter-spacing:-0.03em">304%</div><div style="font-size:12px;color:#9CA3AF;margin-top:5px">전년 대비</div></div>
+    </div>
+    <div style="background:#E8F5F2;border:1px solid rgba(0,89,87,0.18);border-radius:14px;padding:20px 22px;display:flex;flex-direction:column;justify-content:space-between;height:140px">
+      <div><div style="font-size:17px;font-weight:800;color:#191F28;margin-bottom:4px">에픽카 파트너사</div><div style="font-size:13px;color:#6B7280">매출 성장률</div></div>
+      <div><div style="font-size:38px;font-weight:900;color:#005957;line-height:0.9;letter-spacing:-0.03em">850%</div><div style="font-size:12px;color:#9CA3AF;margin-top:5px">전년 대비</div></div>
+    </div>
+  </div>
+</div>
 
-4. 비교표 카드:
-   - 흰 배경
-   - 헤드라인
-   - 깔끔한 비교 테이블: 왼쪽 회색(기존), 오른쪽 틸(에픽카)
-   - 에픽카 컬럼 강조
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+【4. 비교표 카드】예시 HTML:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+<div style="width:540px;height:540px;overflow:hidden;box-sizing:border-box;font-family:'Pretendard',-apple-system,sans-serif;position:relative;background:#fff;padding:36px 40px">
+  <div style="position:absolute;top:0;left:0;right:0;height:4px;background:#005957"></div>
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:22px">${LOGO}<span style="font-size:12px;color:#6B7280">비교 분석</span></div>
+  <div style="font-size:26px;font-weight:900;color:#191F28;letter-spacing:-0.02em;margin-bottom:22px">OEM vs <span style="color:#005957">에픽카</span> 대체부품</div>
+  <div style="display:grid;grid-template-columns:1.4fr 1fr 1fr;border-bottom:2px solid #E5E7EB;padding-bottom:10px;margin-bottom:4px">
+    <div></div>
+    <div style="font-size:13px;font-weight:700;color:#9CA3AF;text-align:center">OEM</div>
+    <div style="text-align:center"><span style="background:#005957;border-radius:100px;padding:3px 12px;font-size:12px;font-weight:700;color:#fff">에픽카</span></div>
+  </div>
+  <div style="display:grid;grid-template-columns:1.4fr 1fr 1fr;height:64px;align-items:center;border-bottom:1px solid #F3F4F6"><div style="font-size:16px;font-weight:600;color:#374151">단가</div><div style="font-size:15px;color:#9CA3AF;text-align:center">정가</div><div style="text-align:center"><span style="background:#E8F5F2;border-radius:8px;padding:5px 12px;font-size:15px;font-weight:800;color:#005957">–30~40%</span></div></div>
+  <div style="display:grid;grid-template-columns:1.4fr 1fr 1fr;height:64px;align-items:center;border-bottom:1px solid #F3F4F6"><div style="font-size:16px;font-weight:600;color:#374151">납기</div><div style="font-size:15px;color:#9CA3AF;text-align:center">3~5일</div><div style="text-align:center"><span style="background:#E8F5F2;border-radius:8px;padding:5px 12px;font-size:15px;font-weight:800;color:#005957">당일~익일</span></div></div>
+  <div style="display:grid;grid-template-columns:1.4fr 1fr 1fr;height:64px;align-items:center;border-bottom:1px solid #F3F4F6"><div style="font-size:16px;font-weight:600;color:#374151">견적</div><div style="font-size:15px;color:#9CA3AF;text-align:center">수동</div><div style="text-align:center"><span style="background:#E8F5F2;border-radius:8px;padding:5px 12px;font-size:15px;font-weight:800;color:#005957">AI 자동</span></div></div>
+  <div style="display:grid;grid-template-columns:1.4fr 1fr 1fr;height:64px;align-items:center"><div style="font-size:16px;font-weight:600;color:#374151">사고처리</div><div style="font-size:14px;color:#9CA3AF;text-align:center">전화 수십 통</div><div style="text-align:center"><span style="background:#E8F5F2;border-radius:8px;padding:5px 12px;font-size:15px;font-weight:800;color:#005957">앱 하나</span></div></div>
+</div>
 
-5. 리스트 카드:
-   - 흰 배경
-   - 투톤 헤드라인
-   - 번호(틸) + 제목 + 설명, 좌측 틸 보더
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+【5. 리스트 카드】예시 HTML:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+<div style="width:540px;height:540px;overflow:hidden;box-sizing:border-box;font-family:'Pretendard',-apple-system,sans-serif;position:relative;background:#fff;padding:36px 40px">
+  <div style="position:absolute;top:0;left:0;right:0;height:4px;background:#005957"></div>
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:22px">${LOGO}</div>
+  <div style="font-size:28px;font-weight:900;line-height:1.2;letter-spacing:-0.02em;margin-bottom:24px"><span style="color:#191F28">에픽카가 바꾼 </span><span style="color:#005957">3가지</span></div>
+  <div style="display:flex;flex-direction:column;gap:14px">
+    <div style="display:flex;align-items:flex-start;gap:16px;background:#F8FBFA;border:1px solid rgba(0,89,87,0.1);border-left:3px solid #005957;border-radius:0 12px 12px 0;padding:18px 20px">
+      <span style="font-size:22px;font-weight:900;color:#005957;line-height:1;flex-shrink:0">1</span>
+      <div><div style="font-size:18px;font-weight:800;color:#191F28;margin-bottom:4px">에픽커넥트</div><div style="font-size:14px;color:#6B7280">사고처리 자동화로 담당자 업무 90% 절감</div></div>
+    </div>
+    <div style="display:flex;align-items:flex-start;gap:16px;background:#F8FBFA;border:1px solid rgba(0,89,87,0.1);border-left:3px solid #005957;border-radius:0 12px 12px 0;padding:18px 20px">
+      <span style="font-size:22px;font-weight:900;color:#005957;line-height:1;flex-shrink:0">2</span>
+      <div><div style="font-size:18px;font-weight:800;color:#191F28;margin-bottom:4px">에픽렌즈</div><div style="font-size:14px;color:#6B7280">AI 기반 부품 판독, 견적 오류 제로화</div></div>
+    </div>
+    <div style="display:flex;align-items:flex-start;gap:16px;background:#F8FBFA;border:1px solid rgba(0,89,87,0.1);border-left:3px solid #005957;border-radius:0 12px 12px 0;padding:18px 20px">
+      <span style="font-size:22px;font-weight:900;color:#005957;line-height:1;flex-shrink:0">3</span>
+      <div><div style="font-size:18px;font-weight:800;color:#191F28;margin-bottom:4px">헤드램프·휠</div><div style="font-size:14px;color:#6B7280">OEM 대비 최대 40% 저렴한 품질 인증 부품</div></div>
+    </div>
+  </div>
+</div>
 
-6. 프로세스/타임라인 카드:
-   - 흰 또는 연한 배경
-   - 단계별 원형 번호(틸) + 연결선 + 내용
-
-7. 인용 카드:
-   - #005957 풀 배경
-   - 흰 큰 따옴표, 흰 인용문, 출처
-
-8. CTA 카드:
-   - #005957 풀 배경 또는 흰 배경
-   - 큰 헤드라인, 연락처 박스(틸 테두리)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+【6. CTA 카드】예시 HTML:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+<div style="width:540px;height:540px;overflow:hidden;box-sizing:border-box;font-family:'Pretendard',-apple-system,sans-serif;position:relative;background:linear-gradient(145deg,#003D3C,#005957 50%,#007A77)">
+  <div style="position:absolute;top:0;left:0;right:0;height:4px;background:linear-gradient(90deg,#1CC76E,rgba(28,199,110,0))"></div>
+  <div style="position:absolute;top:-60px;right:-50px;width:220px;height:220px;border-radius:50%;background:rgba(255,255,255,0.07)"></div>
+  <div style="position:absolute;bottom:-50px;left:-40px;width:180px;height:180px;border-radius:50%;background:rgba(255,255,255,0.05)"></div>
+  <div style="position:absolute;inset:0;padding:44px 44px;display:flex;flex-direction:column;justify-content:space-between">
+    <div>${LOGO_WHITE}</div>
+    <div>
+      <div style="font-size:13px;font-weight:700;color:rgba(255,255,255,0.6);letter-spacing:0.1em;margin-bottom:14px">에픽카 파트너십 문의</div>
+      <div style="font-size:52px;font-weight:900;color:#fff;line-height:1.1;letter-spacing:-0.03em">지금 바로<br>시작하세요</div>
+      <div style="width:40px;height:2px;background:rgba(255,255,255,0.3);border-radius:2px;margin-top:24px"></div>
+    </div>
+    <div style="display:flex;gap:14px">
+      <div style="flex:1;background:rgba(255,255,255,0.12);border:1px solid rgba(255,255,255,0.2);border-radius:14px;padding:18px 20px">
+        <div style="font-size:11px;font-weight:700;color:rgba(255,255,255,0.55);letter-spacing:0.1em;margin-bottom:7px">이메일</div>
+        <div style="font-size:15px;font-weight:700;color:#fff">eficar@eficar.co.kr</div>
+      </div>
+      <div style="flex:1;background:rgba(28,199,110,0.2);border:1px solid rgba(28,199,110,0.35);border-radius:14px;padding:18px 20px">
+        <div style="font-size:11px;font-weight:700;color:rgba(255,255,255,0.55);letter-spacing:0.1em;margin-bottom:7px">전화</div>
+        <div style="font-size:15px;font-weight:700;color:#fff">010-2752-1054</div>
+      </div>
+    </div>
+  </div>
+</div>
 
 【HTML 작성 규칙】
+- 위 예시를 기반으로 내용만 바꿔서 생성. 구조와 스타일은 최대한 유지.
 - 모든 스타일 인라인 (style="" 속성으로만)
-- 외부 이미지 금지
-- 로고: <span style="font-weight:900;color:#005957">∞에픽카</span>
-- 루트: <div style="width:540px;height:540px;overflow:hidden;box-sizing:border-box;...">
-- font-family: 'Pretendard', -apple-system, sans-serif 항상 명시
-- position:relative/absolute로 레이아웃
-- HTML 태그 안에 \n 개행 금지 (\\n을 실제 개행으로 쓰지 말 것)
+- 외부 이미지 금지. 로고는 위 예시 그대로 사용.
+- 루트 div: width:540px;height:540px;overflow:hidden;box-sizing:border-box
+- font-family:'Pretendard',-apple-system,sans-serif 항상 명시
+- 카드 타입별로 위 예시 패턴을 정확히 따를 것
 `;
 
 const COPY_RULES = `
