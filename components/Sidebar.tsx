@@ -28,6 +28,7 @@ const SECTIONS = [
       { href: '/cardnews',   label: '카드뉴스',     icon: Image },
       { href: '/flyer',      label: '안내문 생성',  icon: Newspaper },
       { href: '/targeting',  label: '타겟 메시지',  icon: Users },
+      { href: '/promo',      label: '정비소 프로모', icon: Newspaper },
       { href: '/report',     label: '월간 보고서',  icon: BarChart2 },
     ],
   },
