@@ -38,14 +38,10 @@ const DESIGN_SYSTEM = `
     </div>
     <div style='font-size:12px;color:#9CA3AF;font-weight:600;letter-spacing:0.04em'>eficar.co.kr</div>
   </div>
-  <div style='position:absolute;top:0;right:0;bottom:0;width:216px;background:linear-gradient(145deg,#004745,#005957 50%,#007A77);display:flex;flex-direction:column;align-items:center;justify-content:center'>
-    <div style='position:absolute;top:-40px;right:-30px;width:160px;height:160px;border-radius:50%;background:rgba(255,255,255,0.07)'></div>
-    <div style='position:absolute;bottom:-30px;left:-20px;width:120px;height:120px;border-radius:50%;background:rgba(255,255,255,0.05)'></div>
-    <div style='text-align:center;position:relative;z-index:1'>
-      <div style='font-size:12px;font-weight:700;color:rgba(255,255,255,0.65);letter-spacing:0.1em;margin-bottom:10px'>핵심 성과</div>
-      <div style='font-size:58px;font-weight:900;color:#fff;line-height:0.9;letter-spacing:-0.04em'>1.6억</div>
-      <div style='font-size:13px;font-weight:500;color:rgba(255,255,255,0.6);margin-top:10px;line-height:1.4'>차량 1만대<br>연간 절감액</div>
-    </div>
+  <div style='position:absolute;top:0;right:0;bottom:0;width:216px;background:linear-gradient(145deg,#004745,#005957 50%,#007A77);overflow:hidden'>
+    <div style='position:absolute;top:-60px;right:-60px;width:220px;height:220px;border-radius:50%;background:rgba(255,255,255,0.07)'></div>
+    <div style='position:absolute;bottom:-50px;left:-40px;width:180px;height:180px;border-radius:50%;background:rgba(255,255,255,0.05)'></div>
+    <div style='position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:120px;font-weight:900;color:rgba(255,255,255,0.12);line-height:1;letter-spacing:-0.05em;user-select:none'>∞</div>
   </div>
 </div>
 
