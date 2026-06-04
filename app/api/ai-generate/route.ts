@@ -5,42 +5,66 @@ import { callGemini } from '@/lib/gemini';
 
 export const runtime = 'nodejs';
 
-const EFICAR_CONTEXT = `에픽카(자동차 대체부품 B2B 솔루션) 기본 정보:
-- 주요 고객: 롯데렌탈, SK렌터카, 삼성화재, 그린카
-- 핵심 수치: 공급량 304% 성장, 매출 850% 성장, 1만대당 연간 1.6억 절감, 그린카 업무 90% 절감
-- 주력 제품: 헤드램프, 휠, 에픽커넥트, 에픽렌즈
-- 연락처: eficar@eficar.co.kr`;
+const EFICAR_CONTEXT = `에픽카(자동차 대체부품 B2B 솔루션):
+- 고객사: 롯데렌탈, SK렌터카, 삼성화재, 그린카
+- 수치: 공급량 304% 성장 / 매출 850% 성장 / 1만대당 연간 1.6억 절감 / 그린카 업무 90% 절감 / 대체부품 도입률 2배↑
+- 제품: 헤드램프, 휠, 에픽커넥트(사고처리 자동화), 에픽렌즈(AI 부품 판독)
+- 연락처: eficar@eficar.co.kr / 010-2752-1054`;
+
+const COPY_RULES = `
+【카피라이팅 원칙 — 반드시 준수】
+
+✅ 좋은 헤드라인 패턴 (이렇게 써라):
+- 숫자 선행: "1.6억 절감, 이제 현실입니다"
+- 비교 선언: "3일 걸리던 게 당일이 됐습니다"
+- 결과 중심: "발주 전화가 사라졌습니다"
+- 의문 유발: "부품비, 얼마나 줄일 수 있을까요?"
+
+❌ 금지 표현 (절대 사용 금지):
+- "혁신", "최적화", "스마트", "효율화", "솔루션", "시스템"
+- "~합니다" 형태의 설명체 (카드뉴스는 선언체)
+- 두리뭉술한 수치: "큰 폭으로", "상당히", "많이"
+- 복문 (접속사로 이어진 긴 문장)
+
+【텍스트 길이 제한 — 엄격히 준수】
+- headline: 한글 기준 최대 16자 (줄바꿈 포함 2줄 이내)
+- subheadline: 최대 20자
+- highlight: 숫자+단위만 (예: "1.6억", "850%", "90%")
+- desc: 최대 22자
+- tag/unit/badge: 최대 8자
+- quote: 최대 30자 (실제 현장 언어로)
+- list item title: 최대 12자
+- list item desc: 최대 20자
+- before-after row label: 최대 6자, a/b값: 최대 10자
+- timeline step title: 최대 10자, desc: 최대 18자
+- customer-case metric: 최대 10자, unit: 최대 10자`;
 
 const LAYOUT_SCHEMA = `
-8가지 레이아웃 타입과 데이터 구조:
+【레이아웃별 데이터 구조】
 
-1. "cover" — 다크 배경, 큰 헤드라인 + 강조 수치
-{"layout":"cover","data":{"badge":"에픽카 솔루션","headline":"헤드라인 (2줄 이내)","subheadline":"부제목","highlight":"핵심 수치"}}
+1. "cover" — 첫인상. 숫자가 있으면 highlight에 넣어라.
+{"layout":"cover","data":{"badge":"에픽카","headline":"부품비를\n줄이는 방법","subheadline":"대체부품 공급 플랫폼","highlight":"1.6억"}}
 
-2. "big-number" — 숫자가 카드 70% 차지
-{"layout":"big-number","data":{"tag":"카테고리","number":"850%","unit":"성장","desc":"맥락 설명 한 줄"}}
+2. "big-number" — 숫자 하나가 전부. number는 임팩트 있는 수치만.
+{"layout":"big-number","data":{"tag":"매출 성장","number":"850%","unit":"↑","desc":"전년 대비 실적 기준"}}
 
-3. "before-after" — 2컬럼 비교
-{"layout":"before-after","data":{"headline":"변화 선언","headerA":"OEM 부품","headerB":"에픽카","rows":[{"label":"단가","a":"높음","b":"30% 절감"},{"label":"납기","a":"3~5일","b":"당일~익일"}]}}
-rows 최대 4개.
+3. "before-after" — 구체적 수치로 비교. 애매한 표현 금지.
+{"layout":"before-after","data":{"headline":"OEM vs 에픽카","headerA":"OEM","headerB":"에픽카","rows":[{"label":"단가","a":"정가","b":"-30%"},{"label":"납기","a":"3~5일","b":"당일"},{"label":"견적","a":"수동","b":"AI 자동"},{"label":"사고처리","a":"전화 수십 통","b":"앱 하나"}]}}
 
-4. "list" — 3~4개 포인트 리스트
-{"layout":"list","data":{"headline":"헤드라인","items":[{"title":"포인트 제목","desc":"설명 한 줄"}]}}
-items 3~4개.
+4. "list" — 각 항목은 독립된 한 문장. 나열이 아닌 임팩트.
+{"layout":"list","data":{"headline":"에픽카가 바꾼 것","items":[{"title":"발주 자동화","desc":"전화 확인 업무 소멸"},{"title":"견적 속도","desc":"AI가 3초 안에 판독"},{"title":"원가 절감","desc":"헤드램프 40% 저렴"}]}}
 
-5. "customer-case" — 고객사 실적
-{"layout":"customer-case","data":{"headline":"파트너사 실적","cases":[{"name":"SK렌터카","metric":"연간 절감액","number":"1.6억","unit":"차량 1만대 기준"}]}}
-cases 최대 4개.
+5. "customer-case" — 실명 고객사 + 실제 수치. 추상적 표현 금지.
+{"layout":"customer-case","data":{"headline":"파트너사 실적","cases":[{"name":"SK렌터카","metric":"연간 절감액","number":"1.6억","unit":"1만대 기준"},{"name":"그린카","metric":"업무 절감률","number":"90%","unit":"에픽커넥트"},{"name":"롯데렌탈","metric":"공급량 성장","number":"304%","unit":"전년 대비"}]}}
 
-6. "timeline" — 단계별 프로세스
-{"layout":"timeline","data":{"headline":"도입 프로세스","steps":[{"title":"단계명","desc":"설명"}]}}
-steps 3~4개.
+6. "timeline" — 도입 프로세스. 단계는 동사형으로.
+{"layout":"timeline","data":{"headline":"2주 안에 시작","steps":[{"title":"현황 분석","desc":"부품 사용 패턴 파악"},{"title":"파일럿 세팅","desc":"2주 내 운영 시작"},{"title":"효과 확인","desc":"절감액 수치 리포트"},{"title":"전면 전환","desc":"전 차량 대상 적용"}]}}
 
-7. "quote" — 큰 인용구
-{"layout":"quote","data":{"quote":"인용 문구 (핵심 메시지)","attribution":"출처 또는 고객사","context":"맥락 태그"}}
+7. "quote" — 실제 현장 목소리. 반드시 구체적 상황 언급.
+{"layout":"quote","data":{"quote":"발주 담당자\n전화가 사라졌어요","attribution":"그린카 운영팀","context":"에픽커넥트 도입 3개월 후"}}
 
-8. "cta" — 행동 유도 + 연락처
-{"layout":"cta","data":{"headline":"지금 바로 시작하세요","subheadline":"에픽카 파트너십 문의","contact1":"eficar@eficar.co.kr","contact2":"010-2752-1054"}}
+8. "cta" — 마지막 행동 유도. headline은 직접적으로.
+{"layout":"cta","data":{"headline":"지금 바로\n문의하세요","subheadline":"에픽카 파트너십 상담","contact1":"eficar@eficar.co.kr","contact2":"010-2752-1054"}}
 `;
 
 const SEQUENCE_GUIDE: Record<number, CardLayout[]> = {
@@ -75,9 +99,12 @@ function buildPrompt(input: CardFormInput): string {
     .map((m, i) => `  강조수치${i + 1}: ${m}`)
     .join('\n');
 
-  return `당신은 에픽카 B2B 카드뉴스 전문가입니다. 아래 입력값을 기반으로 카드뉴스 JSON을 생성하세요.
+  return `당신은 Gamma·Canva 수준의 프로 B2B 카드뉴스 크리에이터입니다.
+에픽카 브랜드에 맞는 임팩트 있는 카드뉴스 JSON을 생성하세요.
 
 ${EFICAR_CONTEXT}
+
+${COPY_RULES}
 
 【입력 정보】
 주제/목적: ${input.topic}
@@ -91,23 +118,15 @@ ${sequence.map((layout, i) => `${i + 1}. ${layout}`).join('\n')}
 
 ${LAYOUT_SCHEMA}
 
-【작성 규칙】
-- 첫 번째 카드는 반드시 "cover", 마지막은 반드시 "cta"
-- 각 카드는 단 하나의 핵심 메시지만 전달
-- 실제 수치 사용 필수 (입력된 강조 수치 우선, 없으면 에픽카 기본 데이터 활용)
-- "혁신", "최적화", "스마트", "효율화" 같은 광고 카피 금지
-- 현업 담당자 언어 사용: "전화 확인이 없어졌습니다", "납기가 빨라졌습니다"
-- 텍스트 길이: headline 20자 이내, desc 30자 이내
-- cover의 highlight는 숫자+단위 형태 (예: "1.6억", "850%")
-- cta의 contact1은 반드시 "eficar@eficar.co.kr"
+【최종 체크리스트 — 출력 전 검토】
+□ 모든 headline이 선언체(~다/~요)인가? 설명체(~합니다/~됩니다) 사용 시 다시 작성
+□ 수치가 실제로 포함되어 있는가? 숫자 없는 카드는 수치 추가
+□ 각 카드의 메시지가 서로 다른가? 중복 내용 금지
+□ HTML 태그 없는가? 줄바꿈은 반드시 \\n
+□ 길이 제한 준수했는가?
 
-【텍스트 규칙】
-- HTML 태그 절대 금지 (<br>, <b>, <strong> 등)
-- 줄바꿈이 필요하면 반드시 \\n 사용
-- 헤드라인은 15자 이내 권장, 최대 20자
-
-【출력 형식 — 순수 JSON만, 코드블록 금지】
-{"cards":[{"layout":"cover","data":{...}},{"layout":"big-number","data":{...}},...]}`
+【출력 형식 — 순수 JSON 배열만, 설명·코드블록 일절 금지】
+{"cards":[...]}`
 }
 
 function extractJSON(raw: string): string {
