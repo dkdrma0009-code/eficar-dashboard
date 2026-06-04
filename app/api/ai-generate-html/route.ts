@@ -163,13 +163,53 @@ const DESIGN_SYSTEM = `
   </div>
 </div>
 
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+【6. 타임라인 카드 — 단계별 프로세스】예시 HTML:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+<div style='width:540px;height:540px;overflow:hidden;box-sizing:border-box;font-family:Pretendard,-apple-system,sans-serif;position:relative;background:#F7F9FC;padding:36px 40px'>
+  <div style='position:absolute;top:0;left:0;right:0;height:4px;background:#005957'></div>
+  <div style='display:flex;justify-content:space-between;align-items:center;margin-bottom:6px'>${LOGO}<span style='font-size:12px;color:#6B7280'>도입 프로세스</span></div>
+  <div style='font-size:26px;font-weight:900;color:#191F28;letter-spacing:-0.02em;margin-bottom:28px'>2주 안에 <span style='color:#005957'>시작할 수 있습니다</span></div>
+  <div style='display:flex;flex-direction:column;gap:0'>
+    <div style='display:flex;gap:16px;height:100px'>
+      <div style='display:flex;flex-direction:column;align-items:center;flex-shrink:0;width:36px'>
+        <div style='width:36px;height:36px;border-radius:50%;background:#005957;display:flex;align-items:center;justify-content:center;flex-shrink:0'><span style='font-size:15px;font-weight:900;color:#fff'>1</span></div>
+        <div style='flex:1;width:2px;background:linear-gradient(180deg,#005957,rgba(0,89,87,0.2));margin-top:4px'></div>
+      </div>
+      <div style='padding-top:6px'><div style='font-size:17px;font-weight:800;color:#005957;margin-bottom:5px'>현황 분석</div><div style='font-size:14px;color:#6B7280;line-height:1.4'>부품 사용 패턴 파악 및 절감 가능액 진단</div></div>
+    </div>
+    <div style='display:flex;gap:16px;height:100px'>
+      <div style='display:flex;flex-direction:column;align-items:center;flex-shrink:0;width:36px'>
+        <div style='width:36px;height:36px;border-radius:50%;background:#fff;border:2px solid #CBD5E1;display:flex;align-items:center;justify-content:center;flex-shrink:0'><span style='font-size:15px;font-weight:900;color:#94A3B8'>2</span></div>
+        <div style='flex:1;width:2px;background:linear-gradient(180deg,rgba(0,89,87,0.2),rgba(0,89,87,0.1));margin-top:4px'></div>
+      </div>
+      <div style='padding-top:6px'><div style='font-size:17px;font-weight:800;color:#191F28;margin-bottom:5px'>파일럿 세팅</div><div style='font-size:14px;color:#6B7280;line-height:1.4'>2주 내 운영 시작, 초기 비용 없음</div></div>
+    </div>
+    <div style='display:flex;gap:16px;height:100px'>
+      <div style='display:flex;flex-direction:column;align-items:center;flex-shrink:0;width:36px'>
+        <div style='width:36px;height:36px;border-radius:50%;background:#fff;border:2px solid #CBD5E1;display:flex;align-items:center;justify-content:center;flex-shrink:0'><span style='font-size:15px;font-weight:900;color:#94A3B8'>3</span></div>
+        <div style='flex:1;width:2px;background:rgba(0,89,87,0.1);margin-top:4px'></div>
+      </div>
+      <div style='padding-top:6px'><div style='font-size:17px;font-weight:800;color:#191F28;margin-bottom:5px'>효과 확인</div><div style='font-size:14px;color:#6B7280;line-height:1.4'>절감액 수치 리포트 자동 제공</div></div>
+    </div>
+    <div style='display:flex;gap:16px'>
+      <div style='display:flex;flex-direction:column;align-items:center;flex-shrink:0;width:36px'>
+        <div style='width:36px;height:36px;border-radius:50%;background:#fff;border:2px solid #CBD5E1;display:flex;align-items:center;justify-content:center;flex-shrink:0'><span style='font-size:15px;font-weight:900;color:#94A3B8'>4</span></div>
+      </div>
+      <div style='padding-top:6px'><div style='font-size:17px;font-weight:800;color:#191F28;margin-bottom:5px'>전면 전환</div><div style='font-size:14px;color:#6B7280;line-height:1.4'>전 차량 대상 적용, 연간 1.6억 절감 달성</div></div>
+    </div>
+  </div>
+</div>
+
 【HTML 작성 규칙】
 - 위 예시를 기반으로 내용만 바꿔서 생성. 구조와 스타일은 최대한 유지.
 - 모든 스타일 인라인 (style='' 속성으로만)
+- 이모지(🔄⚙️📦 등) 절대 금지 — 숫자 원형 배지로 대체
 - 외부 이미지 금지. 로고는 위 예시 그대로 사용.
 - 루트 div: width:540px;height:540px;overflow:hidden;box-sizing:border-box
 - font-family:Pretendard,-apple-system,sans-serif 항상 명시
 - 카드 타입별로 위 예시 패턴을 정확히 따를 것
+- timeline 카드는 반드시 원형 번호 + 세로 연결선 구조로 작성
 `;
 
 const COPY_RULES = `
