@@ -8,9 +8,11 @@ import { addCampaign } from '@/lib/campaignStorage';
 import type { CustomerStats } from '@/lib/types';
 import type { TargetingInput } from '@/app/api/targeting-message/route';
 
-type Channel = 'kakao' | 'email' | 'linkedin';
+type Channel = 'sms' | 'lms' | 'kakao' | 'email' | 'linkedin';
 
 interface GeneratedMessages {
+  sms?: string;
+  lms?: string;
   kakao?: string;
   email?: { subject: string; body: string };
   linkedin?: string;
@@ -25,6 +27,8 @@ const GRADE_CONFIG = {
 } as const;
 
 const CHANNEL_CONFIG = {
+  sms:      { label: 'SMS',      icon: '📱', color: 'bg-[#005957] hover:bg-[#004745]',  active: 'bg-[#005957]'  },
+  lms:      { label: 'LMS',      icon: '📝', color: 'bg-[#007A77] hover:bg-[#005957]',  active: 'bg-[#007A77]'  },
   kakao:    { label: '카카오톡', icon: '💬', color: 'bg-yellow-400 hover:bg-yellow-500', active: 'bg-yellow-400' },
   email:    { label: '이메일',   icon: '📧', color: 'bg-blue-500 hover:bg-blue-600',     active: 'bg-blue-500'   },
   linkedin: { label: 'LinkedIn', icon: '💼', color: 'bg-[#0A66C2] hover:bg-[#0952a5]',  active: 'bg-[#0A66C2]'  },
@@ -74,7 +78,10 @@ export default function TargetingPage() {
   const [selected, setSelected] = useState<CustomerStats | null>(null);
   const [manualName, setManualName] = useState('');
   const [additionalContext, setAdditionalContext] = useState('');
-  const [activeChannel, setActiveChannel] = useState<Channel>('kakao');
+  const [activeChannel, setActiveChannel] = useState<Channel>('sms');
+  const [smsPhone, setSmsPhone] = useState('');
+  const [smsSending, setSmsSending] = useState(false);
+  const [smsFeedback, setSmsFeedback] = useState('');
   const [messages, setMessages] = useState<GeneratedMessages | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -123,6 +130,31 @@ export default function TargetingPage() {
       setError(String(e));
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function sendSms(content: string, type: 'sms' | 'lms') {
+    if (!smsPhone.trim()) { setSmsFeedback('수신번호를 입력해주세요.'); return; }
+    setSmsSending(true);
+    setSmsFeedback('');
+    try {
+      const res = await fetch('/api/popbill/sms', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          receiver: smsPhone.trim().replace(/-/g, ''),
+          receiverName: targetName,
+          content,
+          subject: type === 'lms' ? `에픽카 ${targetName} 안내` : undefined,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) throw new Error(data.error ?? '발송 실패');
+      setSmsFeedback(`✅ ${data.msgType} 발송 완료`);
+    } catch (e) {
+      setSmsFeedback(`❌ ${e instanceof Error ? e.message : '발송 실패'}`);
+    } finally {
+      setSmsSending(false);
     }
   }
 
@@ -260,7 +292,7 @@ export default function TargetingPage() {
               <div className="text-center text-gray-400">
                 <div className="text-5xl mb-4">🎯</div>
                 <p className="text-sm font-semibold">고객사를 선택하고 메시지를 생성하세요</p>
-                <p className="text-xs mt-1">카카오톡 / 이메일 / LinkedIn 3종 동시 생성</p>
+                <p className="text-xs mt-1">SMS · LMS · 카카오톡 · 이메일 · LinkedIn 5종 동시 생성</p>
               </div>
             </div>
           )}
@@ -270,7 +302,7 @@ export default function TargetingPage() {
               <div className="text-center">
                 <div className="w-10 h-10 border-4 border-[#005957] border-t-transparent rounded-full animate-spin mx-auto mb-4" />
                 <p className="text-sm text-gray-600 font-semibold">{targetName} 맞춤 메시지 생성 중...</p>
-                <p className="text-xs text-gray-400 mt-1">카카오톡 · 이메일 · LinkedIn 3종</p>
+                <p className="text-xs text-gray-400 mt-1">SMS · LMS · 카카오톡 · 이메일 · LinkedIn 5종</p>
               </div>
             </div>
           )}
@@ -295,6 +327,86 @@ export default function TargetingPage() {
                   );
                 })}
               </div>
+
+              {/* SMS */}
+              {activeChannel === 'sms' && messages.sms && (
+                <div className="bg-white rounded-2xl border border-gray-100 p-6 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="text-lg">📱</span>
+                      <span className="font-bold text-gray-800">SMS 단문</span>
+                      <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${messages.sms.length <= 90 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                        {messages.sms.length}자 / 90자
+                      </span>
+                    </div>
+                    <CopyButton text={messages.sms} channel="sms" customer={targetName} />
+                  </div>
+                  <div className="bg-[#E8F5F2] rounded-xl p-4 text-sm text-gray-800 leading-relaxed whitespace-pre-wrap font-medium">
+                    {messages.sms}
+                  </div>
+                  {/* 직접 발송 */}
+                  <div className="border-t border-gray-100 pt-4">
+                    <p className="text-xs font-semibold text-gray-500 mb-2">팝빌 직접 발송</p>
+                    <div className="flex gap-2">
+                      <input
+                        type="tel"
+                        value={smsPhone}
+                        onChange={e => setSmsPhone(e.target.value)}
+                        placeholder="010-0000-0000"
+                        className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#005957]"
+                      />
+                      <button
+                        onClick={() => sendSms(messages.sms!, 'sms')}
+                        disabled={smsSending || !smsPhone}
+                        className="px-4 py-2 rounded-lg bg-[#005957] text-white text-sm font-bold disabled:opacity-40 hover:bg-[#004745] transition-colors whitespace-nowrap"
+                      >
+                        {smsSending ? '발송 중...' : 'SMS 발송'}
+                      </button>
+                    </div>
+                    {smsFeedback && <p className={`text-xs mt-2 font-semibold ${smsFeedback.startsWith('✅') ? 'text-green-600' : 'text-red-600'}`}>{smsFeedback}</p>}
+                  </div>
+                </div>
+              )}
+
+              {/* LMS */}
+              {activeChannel === 'lms' && messages.lms && (
+                <div className="bg-white rounded-2xl border border-gray-100 p-6 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="text-lg">📝</span>
+                      <span className="font-bold text-gray-800">LMS 장문</span>
+                      <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${messages.lms.length <= 300 ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}`}>
+                        {messages.lms.length}자 / 300자
+                      </span>
+                    </div>
+                    <CopyButton text={messages.lms} channel="lms" customer={targetName} />
+                  </div>
+                  <div className="bg-[#E8F5F2] rounded-xl p-4 text-sm text-gray-800 leading-relaxed whitespace-pre-wrap">
+                    {messages.lms}
+                  </div>
+                  {/* 직접 발송 */}
+                  <div className="border-t border-gray-100 pt-4">
+                    <p className="text-xs font-semibold text-gray-500 mb-2">팝빌 직접 발송</p>
+                    <div className="flex gap-2">
+                      <input
+                        type="tel"
+                        value={smsPhone}
+                        onChange={e => setSmsPhone(e.target.value)}
+                        placeholder="010-0000-0000"
+                        className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#005957]"
+                      />
+                      <button
+                        onClick={() => sendSms(messages.lms!, 'lms')}
+                        disabled={smsSending || !smsPhone}
+                        className="px-4 py-2 rounded-lg bg-[#007A77] text-white text-sm font-bold disabled:opacity-40 hover:bg-[#005957] transition-colors whitespace-nowrap"
+                      >
+                        {smsSending ? '발송 중...' : 'LMS 발송'}
+                      </button>
+                    </div>
+                    {smsFeedback && <p className={`text-xs mt-2 font-semibold ${smsFeedback.startsWith('✅') ? 'text-green-600' : 'text-red-600'}`}>{smsFeedback}</p>}
+                  </div>
+                </div>
+              )}
 
               {/* Kakao */}
               {activeChannel === 'kakao' && messages.kakao && (
