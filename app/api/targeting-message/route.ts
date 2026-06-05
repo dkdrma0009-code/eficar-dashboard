@@ -4,6 +4,9 @@ import { callGemini } from '@/lib/gemini';
 
 export const runtime = 'nodejs';
 
+export type MessagePurpose = '신규제안' | '관계강화' | '이탈방지' | '프로모션';
+export type MessageTone = '정중한' | '친근한' | '긴급한';
+
 export interface TargetingInput {
   customerName: string;
   grade: string;
@@ -14,6 +17,8 @@ export interface TargetingInput {
   transactionCount: number;
   products?: string[];
   additionalContext?: string;
+  purpose?: MessagePurpose;
+  tone?: MessageTone;
 }
 
 function gradeLabel(grade: string): string {
@@ -33,14 +38,27 @@ function formatWon(n: number): string {
   return `${n.toLocaleString()}원`;
 }
 
+const PURPOSE_GUIDE: Record<string, string> = {
+  '신규제안':  '아직 거래가 적거나 새 제품을 제안할 때. 부담 없이 한 번 써보시라는 톤. 구체적인 절감액/납기 수치로 설득.',
+  '관계강화':  '잘 거래 중인 고객사. 이번달 성과를 함께 공유하고 감사 인사. 추가 협력 가능성 자연스럽게 언급.',
+  '이탈방지':  '거래량 감소 or 위험 등급. 이탈 원인을 간접적으로 인정하고 해결책 제시. 특별 혜택이나 담당자 직접 방문 제안.',
+  '프로모션':  '특정 제품/이벤트 안내. 기간 한정 혜택 강조. 즉각적인 행동 유도 (전화/문자).',
+};
+
+const TONE_GUIDE: Record<string, string> = {
+  '정중한': '존댓말, 격식체, 담당자명 존칭. "안녕하세요 담당자님" 스타일.',
+  '친근한': '편안한 존댓말, 이모지 1~2개 허용. "안녕하세요! 에픽카입니다 😊" 스타일.',
+  '긴급한': '짧고 직접적. 기간 강조. "지금 바로", "오늘까지", "마감 임박" 등 사용.',
+};
+
 function buildPrompt(input: TargetingInput): string {
-  const { customerName, grade, currentSales, prevSales, growthRate, totalSales, transactionCount, products, additionalContext } = input;
+  const { customerName, grade, currentSales, prevSales, growthRate, totalSales, transactionCount, products, additionalContext, purpose = '관계강화', tone = '정중한' } = input;
   const sign = growthRate >= 0 ? '+' : '';
   const trend = growthRate >= 10 ? '빠르게 성장 중' : growthRate >= 0 ? '안정적으로 유지' : '전월 대비 감소';
   const productLine = products && products.length > 0 ? `주요 구매 품목: ${products.join(', ')}` : '';
 
   return `당신은 에픽카(자동차 대체부품 B2B 솔루션) 마케팅 담당자입니다.
-아래 고객사 데이터를 바탕으로 3가지 채널별 맞춤 메시지를 작성하세요.
+아래 고객사 데이터를 바탕으로 채널별 맞춤 메시지를 작성하세요.
 
 【에픽카 기본 정보】
 - 주력 제품: 헤드램프, 휠, 에픽커넥트, 에픽렌즈
@@ -59,13 +77,17 @@ function buildPrompt(input: TargetingInput): string {
 ${productLine}
 ${additionalContext ? `추가 맥락: ${additionalContext}` : ''}
 
+【발송 목적: ${purpose}】
+${PURPOSE_GUIDE[purpose]}
+
+【톤: ${tone}】
+${TONE_GUIDE[tone]}
+
 【작성 규칙】
 - 실제 수치를 문구에 자연스럽게 녹일 것
 - 광고 카피 금지 ("혁신", "최적화", "스마트" 등)
 - 현업 담당자 언어 사용
-- grade가 "danger" 또는 "warning"이면: 관계 유지·재활성화 초점
-- grade가 "vip"이면: 감사 + 추가 협력 기회 제안
-- grade가 "new"이면: 온보딩 지원·첫 성과 공유 초점
+- 발송 목적과 톤에 맞게 일관되게 작성
 
 【출력 형식 — 순수 JSON만】
 {

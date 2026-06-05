@@ -6,9 +6,9 @@ import { useDashboardData } from '@/lib/DataContext';
 import { computeViewData, formatCurrency, formatPercent } from '@/lib/dataUtils';
 import { addCampaign } from '@/lib/campaignStorage';
 import type { CustomerStats } from '@/lib/types';
-import type { TargetingInput } from '@/app/api/targeting-message/route';
+import type { TargetingInput, MessagePurpose, MessageTone } from '@/app/api/targeting-message/route';
 
-type Channel = 'sms' | 'lms' | 'kakao' | 'email' | 'linkedin';
+type Channel = 'sms' | 'lms' | 'mms' | 'kakao' | 'email' | 'linkedin';
 
 interface GeneratedMessages {
   sms?: string;
@@ -29,10 +29,24 @@ const GRADE_CONFIG = {
 const CHANNEL_CONFIG = {
   sms:      { label: 'SMS',      icon: '📱', color: 'bg-[#005957] hover:bg-[#004745]',  active: 'bg-[#005957]'  },
   lms:      { label: 'LMS',      icon: '📝', color: 'bg-[#007A77] hover:bg-[#005957]',  active: 'bg-[#007A77]'  },
+  mms:      { label: 'MMS',      icon: '🖼', color: 'bg-[#004745] hover:bg-[#003333]',  active: 'bg-[#004745]'  },
   kakao:    { label: '카카오톡', icon: '💬', color: 'bg-yellow-400 hover:bg-yellow-500', active: 'bg-yellow-400' },
   email:    { label: '이메일',   icon: '📧', color: 'bg-blue-500 hover:bg-blue-600',     active: 'bg-blue-500'   },
   linkedin: { label: 'LinkedIn', icon: '💼', color: 'bg-[#0A66C2] hover:bg-[#0952a5]',  active: 'bg-[#0A66C2]'  },
 } as const;
+
+const PURPOSE_OPTIONS: { value: MessagePurpose; label: string; desc: string }[] = [
+  { value: '신규제안',  label: '신규 제안',  desc: '새 제품·서비스 제안' },
+  { value: '관계강화',  label: '관계 강화',  desc: '성과 공유·감사' },
+  { value: '이탈방지',  label: '이탈 방지',  desc: '거래 감소 고객 재활성화' },
+  { value: '프로모션',  label: '프로모션',   desc: '이벤트·혜택 안내' },
+];
+
+const TONE_OPTIONS: { value: MessageTone; label: string }[] = [
+  { value: '정중한', label: '정중한' },
+  { value: '친근한', label: '친근한' },
+  { value: '긴급한', label: '긴급한' },
+];
 
 function GradeBadge({ grade }: { grade: string }) {
   const cfg = GRADE_CONFIG[grade as keyof typeof GRADE_CONFIG] ?? GRADE_CONFIG.normal;
@@ -79,9 +93,16 @@ export default function TargetingPage() {
   const [manualName, setManualName] = useState('');
   const [additionalContext, setAdditionalContext] = useState('');
   const [activeChannel, setActiveChannel] = useState<Channel>('sms');
+  const [purpose, setPurpose] = useState<MessagePurpose>('관계강화');
+  const [tone, setTone] = useState<MessageTone>('정중한');
   const [smsPhone, setSmsPhone] = useState('');
   const [smsSending, setSmsSending] = useState(false);
   const [smsFeedback, setSmsFeedback] = useState('');
+  const [mmsImage, setMmsImage] = useState<string>(''); // base64
+  const [mmsImageType, setMmsImageType] = useState<string>('image/jpeg');
+  const [mmsSendPhone, setMmsSendPhone] = useState('');
+  const [mmsSending2, setMmsSending2] = useState(false);
+  const [mmsFeedback2, setMmsFeedback2] = useState('');
   const [messages, setMessages] = useState<GeneratedMessages | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -115,6 +136,8 @@ export default function TargetingPage() {
       totalSales: selected?.totalSales ?? 0,
       transactionCount: selected?.transactionCount ?? 0,
       additionalContext: additionalContext.trim() || undefined,
+      purpose,
+      tone,
     };
 
     try {
@@ -155,6 +178,42 @@ export default function TargetingPage() {
       setSmsFeedback(`❌ ${e instanceof Error ? e.message : '발송 실패'}`);
     } finally {
       setSmsSending(false);
+    }
+  }
+
+  function handleMmsImageUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setMmsImageType(file.type);
+    const reader = new FileReader();
+    reader.onload = ev => setMmsImage((ev.target?.result as string).split(',')[1]);
+    reader.readAsDataURL(file);
+  }
+
+  async function sendMms() {
+    if (!mmsSendPhone.trim() || !mmsImage || !messages?.lms) return;
+    setMmsSending2(true);
+    setMmsFeedback2('');
+    try {
+      const res = await fetch('/api/popbill/sms', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          receiver: mmsSendPhone.trim().replace(/-/g, ''),
+          receiverName: targetName,
+          subject: `에픽카 ${targetName} 안내`,
+          content: messages.lms,
+          imageBase64: mmsImage,
+          imageMimeType: mmsImageType,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) throw new Error(data.error ?? '발송 실패');
+      setMmsFeedback2(`✅ MMS 발송 완료`);
+    } catch (e) {
+      setMmsFeedback2(`❌ ${e instanceof Error ? e.message : '발송 실패'}`);
+    } finally {
+      setMmsSending2(false);
     }
   }
 
@@ -263,6 +322,33 @@ export default function TargetingPage() {
               </div>
             </div>
           )}
+
+          {/* 발송 목적 + 톤 */}
+          <div className="bg-white rounded-2xl border border-gray-100 p-4 space-y-3">
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-2">발송 목적</label>
+              <div className="grid grid-cols-2 gap-1.5">
+                {PURPOSE_OPTIONS.map(p => (
+                  <button key={p.value} onClick={() => setPurpose(p.value)}
+                    className={`px-3 py-2 rounded-xl text-left transition-colors border ${purpose === p.value ? 'bg-[#E6F2F2] border-[#005957] text-[#005957]' : 'bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100'}`}>
+                    <div className="text-xs font-bold">{p.label}</div>
+                    <div className="text-xs opacity-60 mt-0.5">{p.desc}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-2">톤</label>
+              <div className="flex gap-1.5">
+                {TONE_OPTIONS.map(t => (
+                  <button key={t.value} onClick={() => setTone(t.value)}
+                    className={`flex-1 py-2 rounded-xl text-xs font-bold transition-colors border ${tone === t.value ? 'bg-[#005957] border-[#005957] text-white' : 'bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100'}`}>
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
 
           {/* Generate button */}
           <button
@@ -404,6 +490,64 @@ export default function TargetingPage() {
                       </button>
                     </div>
                     {smsFeedback && <p className={`text-xs mt-2 font-semibold ${smsFeedback.startsWith('✅') ? 'text-green-600' : 'text-red-600'}`}>{smsFeedback}</p>}
+                  </div>
+                </div>
+              )}
+
+              {/* MMS */}
+              {activeChannel === 'mms' && (
+                <div className="bg-white rounded-2xl border border-gray-100 p-6 space-y-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-lg">🖼</span>
+                    <span className="font-bold text-gray-800">MMS 이미지 발송</span>
+                    <span className="text-xs text-gray-400">이미지 + LMS 문자 동시 발송</span>
+                  </div>
+
+                  {/* 이미지 업로드 */}
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-500 mb-2">이미지 첨부 (JPG/PNG, 300KB 이하)</label>
+                    <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-gray-300 rounded-xl cursor-pointer hover:border-[#005957] hover:bg-[#E6F2F2]/30 transition-colors">
+                      {mmsImage ? (
+                        <div className="flex flex-col items-center gap-2">
+                          <img src={`data:${mmsImageType};base64,${mmsImage}`} className="h-20 w-auto rounded-lg object-contain" alt="preview" />
+                          <span className="text-xs text-[#005957] font-semibold">클릭해서 변경</span>
+                        </div>
+                      ) : (
+                        <div className="flex flex-col items-center gap-2 text-gray-400">
+                          <span className="text-3xl">📷</span>
+                          <span className="text-xs font-semibold">클릭해서 이미지 업로드</span>
+                          <span className="text-xs opacity-60">카드뉴스, 안내문 이미지 등</span>
+                        </div>
+                      )}
+                      <input type="file" accept="image/*" className="hidden" onChange={handleMmsImageUpload} />
+                    </label>
+                  </div>
+
+                  {/* 첨부될 문자 내용 (LMS) */}
+                  {messages?.lms && (
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-500 mb-1.5">첨부 문자 내용 (LMS 자동 사용)</label>
+                      <div className="bg-[#E8F5F2] rounded-xl p-3 text-xs text-gray-700 whitespace-pre-wrap leading-relaxed max-h-32 overflow-y-auto">
+                        {messages.lms}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 발송 */}
+                  <div className="border-t border-gray-100 pt-4">
+                    <p className="text-xs font-semibold text-gray-500 mb-2">팝빌 MMS 발송</p>
+                    <div className="flex gap-2">
+                      <input type="tel" value={mmsSendPhone} onChange={e => setMmsSendPhone(e.target.value)}
+                        placeholder="010-0000-0000"
+                        className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#005957]" />
+                      <button onClick={sendMms} disabled={mmsSending2 || !mmsSendPhone || !mmsImage || !messages?.lms}
+                        className="px-4 py-2 rounded-lg bg-[#004745] text-white text-sm font-bold disabled:opacity-40 hover:bg-[#003333] transition-colors whitespace-nowrap">
+                        {mmsSending2 ? '발송 중...' : 'MMS 발송'}
+                      </button>
+                    </div>
+                    {mmsFeedback2 && (
+                      <p className={`text-xs mt-2 font-semibold ${mmsFeedback2.startsWith('✅') ? 'text-green-600' : 'text-red-600'}`}>{mmsFeedback2}</p>
+                    )}
                   </div>
                 </div>
               )}
