@@ -8,16 +8,22 @@ import { addSendLog } from '@/lib/sendLogStorage';
 /* ─────────────────────────── 타입 ─────────────────────────── */
 type TemplateKey = 'gs25_event' | 'wheel_buyback' | 'epichub_recruit' | 'custom_promo' | 'brand_promo_a' | 'brand_promo_b';
 
+interface Gs25EventItem {
+  part: string;
+  damage: string;
+  amount: string;
+  cardImage?: string;
+  sendDay?: string;
+}
+
 interface Gs25EventData {
-  partName: string;
-  damageDesc: string;
-  couponAmount: string;
+  events: Gs25EventItem[];
   targetCompany: string;
   period: string;
   contactNum: string;
   partnerLogo: 'sk' | 'lotte' | 'none';
   qrUrl: string;
-  showCoss: boolean;         // COSS 공지사항 포함 여부
+  showCoss: boolean;
   cossAuthor: string;
   cossDate: string;
   cossDept: string;
@@ -75,34 +81,130 @@ interface BrandPromoBData {
 }
 
 /* ─────────────────────── html-to-image 캡처 ─────────────────────── */
-async function captureElement(el: HTMLElement): Promise<string> {
+async function captureElement(el: HTMLElement, forMms = false): Promise<string> {
   const { toJpeg } = await import('html-to-image');
   await document.fonts.ready;
   const imgs = Array.from(el.querySelectorAll('img')) as HTMLImageElement[];
   await Promise.all(imgs.map(img =>
     img.complete ? Promise.resolve() : new Promise<void>(r => { img.onload = () => r(); img.onerror = () => r(); })
   ));
-  // cross-origin stylesheet에서 cssRules 접근 시 SecurityError 방지
   const desc = Object.getOwnPropertyDescriptor(CSSStyleSheet.prototype, 'cssRules');
   Object.defineProperty(CSSStyleSheet.prototype, 'cssRules', {
     get() { try { return desc?.get?.call(this) ?? []; } catch { return []; } },
     configurable: true,
   });
   try {
-    const MAX_BYTES = 300 * 1024;
-    let dataUrl = '';
-    for (let q = 0.90; q >= 0.55; q -= 0.05) {
-      dataUrl = await toJpeg(el, { quality: q, pixelRatio: 2, backgroundColor: '#ffffff' });
-      const bytes = Math.round((dataUrl.length - 'data:image/jpeg;base64,'.length) * 3 / 4);
-      if (bytes <= MAX_BYTES) break;
+    if (forMms) {
+      /* MMS: 300KB 이하로 품질 자동 조절 */
+      const MAX_BYTES = 300 * 1024;
+      let dataUrl = '';
+      for (let q = 0.90; q >= 0.55; q -= 0.05) {
+        dataUrl = await toJpeg(el, { quality: q, pixelRatio: 2, backgroundColor: '#ffffff' });
+        const bytes = Math.round((dataUrl.length - 'data:image/jpeg;base64,'.length) * 3 / 4);
+        if (bytes <= MAX_BYTES) break;
+      }
+      return dataUrl;
+    } else {
+      /* 다운로드: 최고 화질 고정 (PNG) */
+      const { toPng } = await import('html-to-image');
+      return await toPng(el, { pixelRatio: 3, backgroundColor: '#ffffff' });
     }
-    return dataUrl;
   } finally {
     if (desc) Object.defineProperty(CSSStyleSheet.prototype, 'cssRules', desc);
   }
 }
 
 /* ══════════════════════════ 템플릿 컴포넌트들 ══════════════════════════ */
+
+/* GS25 모바일 금액권 카드 — 실제 파란 카드 스타일 */
+function GS25Card({ amount }: { amount: string }) {
+  const amt = Number(amount).toLocaleString('ko-KR');
+  return (
+    <div style={{ borderRadius: 14, overflow: 'hidden', boxShadow: '0 3px 12px rgba(0,0,0,0.18)', background: '#1B5FC7', height: 90, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+      <div style={{ background: 'linear-gradient(135deg, #1B5FC7 0%, #2B7BE8 50%, #1650A8 100%)', padding: '6px 14px 5px', position: 'relative', overflow: 'hidden', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+        {/* 배경 원 장식 */}
+        <div style={{ position: 'absolute', right: -20, top: -20, width: 100, height: 100, borderRadius: '50%', background: 'rgba(255,255,255,0.06)' }} />
+        <div style={{ position: 'absolute', right: 40, bottom: -30, width: 80, height: 80, borderRadius: '50%', background: 'rgba(255,255,255,0.04)' }} />
+
+        {/* 상단: GS25 로고 */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <img src="/gs25-logo.png" alt="GS25" style={{ height: 18, width: 'auto' }} />
+          </div>
+          <span style={{ color: 'rgba(255,255,255,0.6)', fontSize: 8, fontWeight: 600 }}>모바일 금액권</span>
+        </div>
+
+        {/* 캐릭터 + 금액 */}
+        <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between' }}>
+          {/* 캐릭터 3종 — 머리만 표현, 컴팩트 */}
+          <svg width="130" height="50" viewBox="0 0 130 50" xmlns="http://www.w3.org/2000/svg">
+            {/* 왼쪽 (크림) */}
+            <ellipse cx="9" cy="10" rx="5" ry="6" fill="#EFE0C0" transform="rotate(-12,9,10)"/>
+            <ellipse cx="9" cy="10" rx="2.5" ry="3.5" fill="#E8C9A8" transform="rotate(-12,9,10)"/>
+            <ellipse cx="23" cy="9" rx="5" ry="6" fill="#EFE0C0" transform="rotate(12,23,9)"/>
+            <ellipse cx="23" cy="9" rx="2.5" ry="3.5" fill="#E8C9A8" transform="rotate(12,23,9)"/>
+            <circle cx="16" cy="23" r="13" fill="#EFE0C0"/>
+            <ellipse cx="11" cy="21" rx="4" ry="3" fill="#C8A882"/><ellipse cx="21" cy="21" rx="4" ry="3" fill="#C8A882"/>
+            <ellipse cx="11" cy="20.5" rx="2.8" ry="2.8" fill="white"/><ellipse cx="21" cy="20.5" rx="2.8" ry="2.8" fill="white"/>
+            <circle cx="11.5" cy="21" r="1.5" fill="#1A1A1A"/><circle cx="21.5" cy="21" r="1.5" fill="#1A1A1A"/>
+            <circle cx="12" cy="20.4" r="0.5" fill="white"/><circle cx="22" cy="20.4" r="0.5" fill="white"/>
+            <ellipse cx="16" cy="27" rx="4.5" ry="3" fill="#F5C8A0"/>
+            <ellipse cx="9" cy="26" rx="2.2" ry="1.3" fill="rgba(255,150,100,0.3)"/>
+            <ellipse cx="23" cy="26" rx="2.2" ry="1.3" fill="rgba(255,150,100,0.3)"/>
+            <ellipse cx="16" cy="40" rx="11" ry="12" fill="#EFE0C0"/>
+            <ellipse cx="16" cy="42" rx="6.5" ry="7" fill="#F5EDD5"/>
+            {/* 가운데 (주황 여우) */}
+            <ellipse cx="47" cy="8" rx="6" ry="7.5" fill="#D4541F" transform="rotate(-10,47,8)"/>
+            <ellipse cx="47" cy="8" rx="3" ry="4.5" fill="#F4845A" transform="rotate(-10,47,8)"/>
+            <ellipse cx="65" cy="7" rx="6" ry="7.5" fill="#D4541F" transform="rotate(10,65,7)"/>
+            <ellipse cx="65" cy="7" rx="3" ry="4.5" fill="#F4845A" transform="rotate(10,65,7)"/>
+            <circle cx="56" cy="24" r="16" fill="#D4541F"/>
+            <ellipse cx="56" cy="28" rx="10" ry="8" fill="#F5C8A0"/>
+            <ellipse cx="48" cy="20" rx="5" ry="4" fill="#B83C10"/><ellipse cx="64" cy="20" rx="5" ry="4" fill="#B83C10"/>
+            <ellipse cx="48" cy="19.5" rx="3.5" ry="3.5" fill="white"/><ellipse cx="64" cy="19.5" rx="3.5" ry="3.5" fill="white"/>
+            <circle cx="48.5" cy="20" r="2" fill="#1A1A1A"/><circle cx="64.5" cy="20" r="2" fill="#1A1A1A"/>
+            <circle cx="49.2" cy="19.3" r="0.7" fill="white"/><circle cx="65.2" cy="19.3" r="0.7" fill="white"/>
+            <ellipse cx="56" cy="27" rx="3" ry="2" fill="#8B3010"/>
+            <path d="M52 31 Q56 34.5 60 31" stroke="#8B3010" strokeWidth="1.1" fill="none" strokeLinecap="round"/>
+            <ellipse cx="47" cy="28" rx="3" ry="1.8" fill="rgba(255,120,60,0.35)"/>
+            <ellipse cx="65" cy="28" rx="3" ry="1.8" fill="rgba(255,120,60,0.35)"/>
+            <ellipse cx="56" cy="42" rx="14" ry="13" fill="#D4541F"/>
+            <ellipse cx="56" cy="44" rx="8.5" ry="8" fill="#F5C8A0"/>
+            {/* 오른쪽 (검정 고양이) */}
+            <ellipse cx="104" cy="10" rx="5" ry="6.5" fill="#2A2A2A" transform="rotate(-12,104,10)"/>
+            <ellipse cx="104" cy="10" rx="2.5" ry="3.5" fill="#444" transform="rotate(-12,104,10)"/>
+            <ellipse cx="118" cy="9" rx="5" ry="6.5" fill="#2A2A2A" transform="rotate(12,118,9)"/>
+            <ellipse cx="118" cy="9" rx="2.5" ry="3.5" fill="#444" transform="rotate(12,118,9)"/>
+            <circle cx="111" cy="23" r="13" fill="#2A2A2A"/>
+            <ellipse cx="111" cy="28" rx="8" ry="6.5" fill="#E8E8E8"/>
+            <ellipse cx="105" cy="20" rx="4.5" ry="3.5" fill="#555"/><ellipse cx="117" cy="20" rx="4.5" ry="3.5" fill="#555"/>
+            <ellipse cx="105" cy="19.5" rx="3" ry="3" fill="white"/><ellipse cx="117" cy="19.5" rx="3" ry="3" fill="white"/>
+            <circle cx="105.5" cy="20" r="1.8" fill="#1A1A1A"/><circle cx="117.5" cy="20" r="1.8" fill="#1A1A1A"/>
+            <circle cx="106.2" cy="19.3" r="0.6" fill="white"/><circle cx="118.2" cy="19.3" r="0.6" fill="white"/>
+            <ellipse cx="111" cy="27" rx="2.5" ry="1.8" fill="#888"/>
+            <path d="M108 30 Q111 32.5 114 30" stroke="#666" strokeWidth="1" fill="none" strokeLinecap="round"/>
+            <ellipse cx="111" cy="40" rx="11" ry="12" fill="#2A2A2A"/>
+            <ellipse cx="111" cy="42" rx="6.5" ry="7" fill="#E0E0E0"/>
+          </svg>
+
+          {/* 금액 */}
+          <div style={{ textAlign: 'right' }}>
+            <div style={{ fontSize: 24, fontWeight: 900, color: 'white', letterSpacing: -1, lineHeight: 1 }}>{amt}원</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CardDisplay({ cardImage, amount }: { cardImage?: string; amount: string }) {
+  const [err, setErr] = useState(false);
+  useEffect(() => { setErr(false); }, [cardImage]);
+  if (cardImage && !err) {
+    return <img src={cardImage} alt="GS25 카드" style={{ width: '100%', height: 'auto', display: 'block' }} onError={() => setErr(true)} />;
+  }
+  return <GS25Card amount={amount} />;
+}
 
 function Gs25EventFlyer({ d }: { d: Gs25EventData }) {
   const [qrBlobUrl, setQrBlobUrl] = useState('');
@@ -119,154 +221,163 @@ function Gs25EventFlyer({ d }: { d: Gs25EventData }) {
 
   const cossBeforeLines = d.cossBodyBefore.split('\n');
   const cossAfterLines = d.cossBodyAfter.split('\n');
-  const amt = Number(d.couponAmount).toLocaleString('ko-KR');
-  const Circle = ({ n }: { n: string }) => (
-    <div style={{ width: 36, height: 36, borderRadius: '50%', background: '#005BAC', margin: '0 auto 6px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <span style={{ color: 'white', fontSize: 16, fontWeight: 800, lineHeight: 1 }}>{n}</span>
-    </div>
-  );
+
+  const heroSrc = '/mechanic.png';
+  const tealFilter = 'brightness(0) saturate(100%) invert(27%) sepia(95%) saturate(520%) hue-rotate(150deg) brightness(90%)';
+
   return (
-    <div style={{ width: 480, height: 1000, fontFamily: 'Arial, sans-serif', background: '#fff', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+    <div style={{ width: 480, fontFamily: "'Noto Sans KR', Arial, sans-serif", background: '#fff', display: 'flex', flexDirection: 'column' }}>
 
       {/* ── 헤더 ── */}
-      <div style={{ background: 'linear-gradient(160deg, #005BAC 0%, #1A7DC4 100%)', padding: '10px 24px', textAlign: 'center' }}>
-        <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: '#FFD700', borderRadius: 8, padding: '3px 20px', marginBottom: 7 }}>
-          <span style={{ fontSize: 30, fontWeight: 900, color: '#005BAC', letterSpacing: -1, lineHeight: 1 }}>GS25</span>
-        </div>
-        <div style={{ color: 'white', fontSize: 16, fontWeight: 800, marginBottom: 7 }}>에픽카 에서</div>
-        <div style={{ display: 'inline-block', background: 'rgba(255,255,255,0.13)', border: '1.5px solid rgba(255,255,255,0.4)', borderRadius: 6, padding: '6px 20px', marginBottom: 9 }}>
-          <span style={{ color: 'white', fontSize: 16, fontWeight: 700 }}>[{d.partName} {d.damageDesc}] 수리 시</span>
-        </div>
-        <div style={{ color: '#FFD700', fontSize: 26, fontWeight: 900, lineHeight: '1.2' }}>
-          GS25 {amt}원 상품권 드려요
-        </div>
-      </div>
-
-      {/* ── COSS 공지사항 ── */}
-      {d.showCoss && <div style={{ padding: '5px 14px', background: '#FAFAFA', borderBottom: '2px solid #E5E7EB' }}>
-        <div style={{ fontSize: 11, fontWeight: 800, color: '#DC2626', marginBottom: 3 }}>[{d.targetCompany} COSS 공지사항]</div>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11, tableLayout: 'fixed' }}>
-          <colgroup><col style={{ width: 52 }} /><col /><col style={{ width: 54 }} /><col /></colgroup>
-          <tbody>
-            <tr>
-              <td style={{ padding: '3px 7px', background: '#F3F4F6', fontWeight: 700, border: '1px solid #D1D5DB', color: '#374151' }}>작성자</td>
-              <td style={{ padding: '3px 7px', border: '1px solid #D1D5DB', color: '#374151' }}>{d.cossAuthor}</td>
-              <td style={{ padding: '3px 7px', background: '#F3F4F6', fontWeight: 700, border: '1px solid #D1D5DB', color: '#374151' }}>작성일</td>
-              <td style={{ padding: '3px 7px', border: '1px solid #D1D5DB', color: '#374151' }}>{d.cossDate}</td>
-            </tr>
-            <tr>
-              <td style={{ padding: '3px 7px', background: '#F3F4F6', fontWeight: 700, border: '1px solid #D1D5DB', color: '#374151' }}>소속</td>
-              <td colSpan={3} style={{ padding: '3px 7px', border: '1px solid #D1D5DB', color: '#374151' }}>{d.cossDept}</td>
-            </tr>
-            <tr>
-              <td style={{ padding: '3px 7px', background: '#F3F4F6', fontWeight: 700, border: '1px solid #D1D5DB', color: '#374151' }}>제목</td>
-              <td colSpan={3} style={{ padding: '3px 7px', border: '1px solid #D1D5DB', color: '#374151' }}>{d.cossTitle}</td>
-            </tr>
-            <tr>
-              <td style={{ padding: '3px 7px', background: '#F3F4F6', fontWeight: 700, border: '1px solid #D1D5DB', color: '#374151', verticalAlign: 'top' }}>내용</td>
-              <td colSpan={3} style={{ padding: '4px 7px', border: '1px solid #D1D5DB', color: '#374151', lineHeight: '1.5' }}>
-                {cossBeforeLines.map((line, i) => <span key={`b${i}`}>{line}{i < cossBeforeLines.length - 1 && <br />}</span>)}
-                <div style={{ background: '#FEF3C7', border: '1px solid #FDE68A', borderRadius: 3, padding: '4px 9px', margin: '3px 0', fontWeight: 800, fontSize: 13, color: '#92400E', wordBreak: 'keep-all' }}>
-                  {d.cossHighlight}
-                </div>
-                {cossAfterLines.map((line, i) => <span key={`a${i}`}>{line}{i < cossAfterLines.length - 1 && <br />}</span>)}
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>}
-
-      {/* ── 배너 ── */}
-      <div style={{ background: '#1A2E3B', padding: '7px 20px', textAlign: 'center' }}>
-        <span style={{ color: 'white', fontSize: 15, fontWeight: 800 }}>{d.partName}수리 주문 시 에픽카에 연락주세요</span>
-      </div>
-
-      {/* ── 프로세스 스텝 (table 기반 — flex 완전 제거) ── */}
-      <div style={{ padding: '9px 20px 8px', background: '#fff' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
-          <tbody>
-            <tr>
-              <td style={{ textAlign: 'center', verticalAlign: 'top', padding: '0 4px' }}>
-                <Circle n="1" />
-                <div style={{ fontSize: 22, marginBottom: 4 }}>🪑</div>
-                <div style={{ fontSize: 12, fontWeight: 700, color: '#191F28' }}>{d.partName} 손상 확인</div>
-                <div style={{ fontSize: 10, color: '#6B7280' }}>{d.targetCompany} 차량 대상</div>
-              </td>
-              <td style={{ textAlign: 'center', verticalAlign: 'top', width: 24, paddingTop: 10 }}>
-                <span style={{ fontSize: 14, color: '#9CA3AF' }}>→</span>
-              </td>
-              <td style={{ textAlign: 'center', verticalAlign: 'top', padding: '0 4px' }}>
-                <Circle n="2" />
-                <div style={{ fontSize: 22, marginBottom: 4 }}>📞</div>
-                <div style={{ fontSize: 12, fontWeight: 700, color: '#191F28' }}>에픽카 연락</div>
-                <div style={{ fontSize: 10, color: '#6B7280' }}>전화 또는 카카오 채널</div>
-              </td>
-              <td style={{ textAlign: 'center', verticalAlign: 'top', width: 24, paddingTop: 10 }}>
-                <span style={{ fontSize: 14, color: '#9CA3AF' }}>→</span>
-              </td>
-              <td style={{ textAlign: 'center', verticalAlign: 'top', padding: '0 4px' }}>
-                <Circle n="3" />
-                <div style={{ fontSize: 22, marginBottom: 4 }}>🎁</div>
-                <div style={{ fontSize: 12, fontWeight: 700, color: '#191F28' }}>상품권 수령</div>
-                <div style={{ fontSize: 10, color: '#6B7280' }}>주문 익일 발송</div>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-
-      {/* ── 연락처 (table 기반 — flex 완전 제거) ── */}
-      <div style={{ background: '#005957', padding: '10px 20px' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-          <tbody>
-            <tr>
-              <td style={{ verticalAlign: 'middle', width: 38, fontSize: 24 }}>📞</td>
-              <td style={{ verticalAlign: 'middle', paddingLeft: 8 }}>
-                <div style={{ color: 'rgba(255,255,255,0.8)', fontSize: 11, fontWeight: 600 }}>에픽카 대표 번호</div>
-                <div style={{ color: '#FFD700', fontSize: 24, fontWeight: 900, letterSpacing: 2 }}>{d.contactNum}</div>
-                <div style={{ color: 'rgba(255,255,255,0.65)', fontSize: 10 }}>전화 또는 카카오톡 채널로 문의</div>
-              </td>
-              {qrBlobUrl && (
-                <td style={{ verticalAlign: 'middle', textAlign: 'right', width: 72 }}>
-                  <div style={{ display: 'inline-block', background: 'white', borderRadius: 6, padding: 4 }}>
-                    <img src={qrBlobUrl} width={56} height={56} alt="QR" style={{ display: 'block' }} />
-                  </div>
-                </td>
-              )}
-            </tr>
-          </tbody>
-        </table>
-      </div>
-
-      {/* ── 이벤트 박스 ── */}
-      <div style={{ padding: '10px 20px', background: '#fff', flex: 1, overflow: 'hidden' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#1A1A2E', borderRadius: 6, padding: '6px 0', fontSize: 15, fontWeight: 900, color: 'white', marginBottom: 10, letterSpacing: 1 }}>
-          <span style={{ lineHeight: 1 }}>Event</span>
-        </div>
-        <div style={{ fontSize: 14, textAlign: 'center', color: '#191F28', marginBottom: 6, lineHeight: '1.6' }}>
-          {d.partName}수리 주문 한 건당,<br />
-          <strong style={{ color: '#005957', fontSize: 24 }}>에픽카가 GS25 {amt}원 상품권 쏩니다!</strong>
-        </div>
-        {[
-          { label: '대상 차량', value: d.targetCompany + ' 차량' },
-          { label: '대상 부품', value: d.partName },
-          { label: '기간', value: d.period },
-          { label: '전송일', value: '사용건 확인 후 익일' },
-        ].map(r => (
-          <div key={r.label} style={{ marginBottom: 4 }}>
-            <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: '#005957', color: 'white', fontSize: 11, fontWeight: 700, padding: '3px 12px', borderRadius: 20, lineHeight: 1 }}>{r.label}</span>
-            <span style={{ display: 'inline-block', fontSize: 13, color: '#374151', marginLeft: 8, verticalAlign: 'middle' }}>{r.value}</span>
+      <div style={{ background: 'white', overflow: 'hidden' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 16px 0' }}>
+            <img src="/gs25-logo.png" alt="GS25" style={{ height: 28, width: 'auto' }} />
+            <img src="/eficar_logo_white.png" alt="에픽카" style={{ height: 12, width: 'auto', filter: tealFilter }} />
           </div>
-        ))}
-        <div style={{ textAlign: 'center', color: '#EF4444', fontSize: 12, fontWeight: 600, marginTop: 2 }}>* 무한대로 수령 가능!</div>
+          <div style={{ display: 'flex', alignItems: 'flex-end' }}>
+            <div style={{ flex: 1, padding: '6px 16px 10px' }}>
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: '#E8F5F3', borderRadius: 20, padding: '3px 9px', marginBottom: 6 }}>
+                <img src="/eficar_logo_white.png" alt="" style={{ height: 10, filter: tealFilter, verticalAlign: 'middle' }} />
+                <span style={{ fontSize: 10, fontWeight: 800, color: '#005957', lineHeight: 1 }}>부품</span>
+              </div>
+              <div style={{ fontSize: 22, fontWeight: 900, color: '#111827', lineHeight: 1.15, letterSpacing: -0.5, marginBottom: 4 }}>한 건만<br />사용해도!</div>
+              <div style={{ fontSize: 14, fontWeight: 900, color: '#007A6E', marginBottom: 8 }}>GS25 상품권 드려요</div>
+              <div style={{ display: 'inline-flex', alignItems: 'center', background: '#007A6E', borderRadius: 20, padding: '5px 13px' }}>
+                <span style={{ color: 'white', fontSize: 9.5, fontWeight: 700, lineHeight: 1 }}>이벤트 안내하기 →</span>
+              </div>
+            </div>
+            <div style={{ width: 170, flexShrink: 0, position: 'relative' }}>
+              <div style={{ position: 'absolute', top: 2, right: 8, background: 'white', border: '1.5px solid #E5E7EB', borderRadius: 8, padding: '3px 7px', fontSize: 9, fontWeight: 700, color: '#374151', whiteSpace: 'nowrap', boxShadow: '0 1px 4px rgba(0,0,0,0.08)', zIndex: 2 }}>
+                📞 {d.contactNum}
+              </div>
+              <img src={heroSrc} alt="정비소" style={{ width: '100%', height: 110, display: 'block', objectFit: 'contain', objectPosition: 'bottom' }} />
+            </div>
+          </div>
+        </div>
+
+      {/* ── COSS (~90px) ── */}
+      {d.showCoss && (
+        <div style={{ padding: '4px 12px', background: '#FFFDF5', borderBottom: '2px solid #FDE68A' }}>
+          <div style={{ fontSize: 10, fontWeight: 800, color: '#B45309', marginBottom: 3, display: 'flex', alignItems: 'center', gap: 3 }}>
+            <span style={{ background: '#DC2626', color: 'white', borderRadius: 2, padding: '1px 4px', fontSize: 8.5, fontWeight: 900 }}>공지</span>
+            {d.targetCompany} COSS 공지사항
+          </div>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 10, tableLayout: 'fixed' }}>
+            <colgroup><col style={{ width: 42 }} /><col /><col style={{ width: 44 }} /><col /></colgroup>
+            <tbody>
+              <tr>
+                <td style={{ padding: '1.5px 5px', background: '#FEF3C7', fontWeight: 700, border: '1px solid #FDE68A', color: '#92400E' }}>작성자</td>
+                <td style={{ padding: '1.5px 5px', border: '1px solid #FDE68A', color: '#374151' }}>{d.cossAuthor}</td>
+                <td style={{ padding: '1.5px 5px', background: '#FEF3C7', fontWeight: 700, border: '1px solid #FDE68A', color: '#92400E' }}>작성일</td>
+                <td style={{ padding: '1.5px 5px', border: '1px solid #FDE68A', color: '#374151' }}>{d.cossDate}</td>
+              </tr>
+              <tr>
+                <td style={{ padding: '1.5px 5px', background: '#FEF3C7', fontWeight: 700, border: '1px solid #FDE68A', color: '#92400E' }}>소속</td>
+                <td colSpan={3} style={{ padding: '1.5px 5px', border: '1px solid #FDE68A', color: '#374151' }}>{d.cossDept}</td>
+              </tr>
+              <tr>
+                <td style={{ padding: '1.5px 5px', background: '#FEF3C7', fontWeight: 700, border: '1px solid #FDE68A', color: '#92400E' }}>제목</td>
+                <td colSpan={3} style={{ padding: '1.5px 5px', border: '1px solid #FDE68A', color: '#374151' }}>{d.cossTitle}</td>
+              </tr>
+              <tr>
+                <td style={{ padding: '1.5px 5px', background: '#FEF3C7', fontWeight: 700, border: '1px solid #FDE68A', color: '#92400E', verticalAlign: 'top' }}>내용</td>
+                <td colSpan={3} style={{ padding: '3px 5px', border: '1px solid #FDE68A', color: '#374151', lineHeight: '1.45', fontSize: 10 }}>
+                  {cossBeforeLines.map((line, i) => <span key={`b${i}`}>{line}{i < cossBeforeLines.length - 1 && <br />}</span>)}
+                  <div style={{ background: '#FEF3C7', border: '1px solid #FDE68A', borderRadius: 2, padding: '2px 6px', margin: '2px 0', fontWeight: 800, fontSize: 11, color: '#92400E', wordBreak: 'keep-all' }}>
+                    {d.cossHighlight}
+                  </div>
+                  {cossAfterLines.map((line, i) => <span key={`a${i}`}>{line}{i < cossAfterLines.length - 1 && <br />}</span>)}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* ── 정보 밴드 (~55px) ── */}
+      <div style={{ background: '#005957', padding: '7px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div style={{ flex: 1 }}>
+          {[
+            { label: '기간', value: d.period },
+            { label: '참여대상', value: `${d.targetCompany} 협력 정비소 공장장님` },
+            { label: '대표번호', value: d.contactNum },
+          ].map(r => (
+            <div key={r.label} style={{ display: 'flex', gap: 5, marginBottom: 2 }}>
+              <span style={{ fontSize: 9.5, fontWeight: 800, color: 'rgba(255,255,255,0.6)', width: 46, flexShrink: 0 }}>{r.label}</span>
+              <span style={{ fontSize: 9.5, color: r.label === '대표번호' ? '#FFE066' : 'white', fontWeight: r.label === '대표번호' ? 800 : 400 }}>{r.value}</span>
+            </div>
+          ))}
+        </div>
+        {qrBlobUrl && (
+          <div style={{ background: 'white', borderRadius: 5, padding: 2, flexShrink: 0, marginLeft: 8 }}>
+            <img src={qrBlobUrl} width={46} height={46} alt="QR" style={{ display: 'block' }} />
+          </div>
+        )}
       </div>
 
-      {/* ── 하단 ── */}
-      <div style={{ background: '#1A1A2E', padding: '9px 20px', textAlign: 'center' }}>
-        {d.partnerLogo === 'sk' && <span style={{ color: 'white', fontSize: 12, fontWeight: 700, marginRight: 10 }}>SK 렌터카</span>}
-        {d.partnerLogo === 'lotte' && <span style={{ color: 'white', fontSize: 12, fontWeight: 700, marginRight: 10 }}>롯데렌탈</span>}
-        <span style={{ color: 'rgba(255,255,255,0.9)', fontSize: 13, fontWeight: 800, fontStyle: 'italic', marginRight: 10 }}>에픽카</span>
-        <span style={{ color: '#6B7280', fontSize: 10 }}>프로모션 사전 공지 없이 조기 종료될 수 있습니다.</span>
+      {/* ── 이벤트 섹션 (~220px × 3 = 660px) ── */}
+      {(d.events ?? []).map((ev, idx) => {
+        const CARD_BY_AMOUNT: Record<string, string> = {
+          '3000':  '/gs25-3000.png',
+          '5000':  '/gs25-5000.png',
+          '50000': '/gs25-50000.png',
+        };
+        const cardSrc = ev.cardImage || CARD_BY_AMOUNT[ev.amount] || '';
+        return (
+          <div key={idx} style={{ background: 'white', borderBottom: '4px solid #F1F5F9', display: 'flex', alignItems: 'stretch' }}>
+            {/* 좌측: 설명 + 표 + 뱃지 */}
+            <div style={{ flex: 1, padding: '7px 10px 8px 14px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+              <div>
+                <div style={{ marginBottom: 5 }}>
+                  <span style={{ display: 'inline-block', background: '#007A6E', borderRadius: 20, padding: '2px 9px', fontSize: 10, fontWeight: 900, color: 'white', verticalAlign: 'middle', marginRight: 5 }}>Event {idx + 1}</span>
+                  <span style={{ fontSize: 11, fontWeight: 900, color: '#111827', lineHeight: 1.4, verticalAlign: 'middle', wordBreak: 'keep-all' }}>
+                    {ev.part} 사용한 건당, GS25 상품권 쿠폰!
+                  </span>
+                </div>
+                <div style={{ border: '1px solid #E5E7EB', borderRadius: 5, overflow: 'hidden' }}>
+                  {[
+                    { label: '대상 차량', value: `${d.targetCompany} 차량` },
+                    { label: '대상 부품', value: ev.part + (ev.damage ? ` (${ev.damage})` : '') },
+                    { label: '전송일', value: ev.sendDay || '사용건 확인 후 익일' },
+                  ].map((r, ri) => (
+                    <div key={r.label} style={{ display: 'flex', borderBottom: ri < 2 ? '1px solid #E5E7EB' : 'none' }}>
+                      <div style={{ width: 58, background: '#F9FAFB', padding: '3px 6px', fontSize: 9.5, fontWeight: 700, color: '#374151', flexShrink: 0 }}>{r.label}</div>
+                      <div style={{ flex: 1, padding: '3px 6px', fontSize: 9.5, color: '#111827' }}>{r.value}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div style={{ marginTop: 5 }}>
+                <div style={{ display: 'inline-flex', alignItems: 'center', gap: 3, background: '#E8F5F3', border: '1px solid #A7D7D3', borderRadius: 20, padding: '3px 9px' }}>
+                  <span style={{ color: '#007A6E', fontSize: 9.5, lineHeight: 1 }}>✦</span>
+                  <span style={{ fontSize: 9.5, fontWeight: 800, color: '#005957', lineHeight: 1 }}>무한대로 수령 가능!</span>
+                </div>
+              </div>
+            </div>
+            {/* 우측: 카드 이미지 (크롭 없이 비율 유지) */}
+            <div style={{ width: 162, flexShrink: 0, padding: '7px 12px 7px 0', display: 'flex', alignItems: 'center' }}>
+              <div style={{ borderRadius: 8, overflow: 'hidden', boxShadow: '0 2px 8px rgba(0,0,0,0.14)', width: '100%' }}>
+                <CardDisplay key={cardSrc} cardImage={cardSrc} amount={ev.amount} />
+              </div>
+            </div>
+          </div>
+        );
+      })}
+
+      {/* ── 푸터 (~42px) ── */}
+      <div style={{ background: '#1A1A2E', padding: '10px 18px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, marginBottom: 4 }}>
+          {d.partnerLogo !== 'none' && (
+            <>
+              <PartnerLogoSVG logo={d.partnerLogo} name={d.targetCompany} />
+              <span style={{ color: 'rgba(255,255,255,0.3)', fontSize: 12 }}>×</span>
+            </>
+          )}
+          <img src="/eficar_logo_white.png" alt="에픽카" style={{ height: 16, width: 'auto' }} />
+        </div>
+        <div style={{ textAlign: 'center', color: '#475569', fontSize: 8.5 }}>
+          이벤트 조기 종료 시 사전 공지 없이 종료될 수 있으며, 기사용 부품에 대해서는 지급이 됩니다.
+        </div>
       </div>
     </div>
   );
@@ -427,27 +538,11 @@ function CustomPromoFlyer({ d }: { d: CustomPromoData }) {
   );
 }
 
-/* ── 파트너 로고 SVG ── */
+/* ── 파트너 로고 ── */
 function PartnerLogoSVG({ logo, name }: { logo: 'sk' | 'lotte' | 'none'; name: string }) {
-  if (logo === 'sk') {
-    return (
-      <svg width="60" height="28" viewBox="0 0 60 28" xmlns="http://www.w3.org/2000/svg">
-        <rect width="60" height="28" rx="4" fill="#E8400C" />
-        <text x="13" y="17" fontFamily="Arial,sans-serif" fontWeight="900" fontSize="13" fill="white">SK</text>
-        <text x="32" y="17" fontFamily="Arial,sans-serif" fontWeight="600" fontSize="9" fill="rgba(255,255,255,0.9)">렌터카</text>
-      </svg>
-    );
-  }
-  if (logo === 'lotte') {
-    return (
-      <svg width="60" height="28" viewBox="0 0 60 28" xmlns="http://www.w3.org/2000/svg">
-        <rect width="60" height="28" rx="4" fill="#E60012" />
-        <text x="7" y="17" fontFamily="Arial,sans-serif" fontWeight="900" fontSize="13" fill="white">롯데</text>
-        <text x="34" y="17" fontFamily="Arial,sans-serif" fontWeight="600" fontSize="9" fill="rgba(255,255,255,0.9)">렌탈</text>
-      </svg>
-    );
-  }
-  return <span style={{ fontSize: 12, fontWeight: 700, color: '#374151' }}>{name}</span>;
+  if (logo === 'sk') return <img src="/sk-logo.png" alt="SK렌터카" style={{ height: 28, width: 'auto' }} />;
+  if (logo === 'lotte') return <img src="/lotte-logo.png" alt="롯데렌탈" style={{ height: 28, width: 'auto' }} />;
+  return <span style={{ fontSize: 12, fontWeight: 700, color: 'white' }}>{name}</span>;
 }
 
 /* ── 제품 아이콘 SVG ── */
@@ -671,6 +766,7 @@ function BrandPromoBFlyer({ d }: { d: BrandPromoBData }) {
   );
 }
 
+
 /* ══════════════════════════ 메인 페이지 ══════════════════════════ */
 const TEMPLATES: { key: TemplateKey; label: string; emoji: string; desc: string }[] = [
   { key: 'gs25_event', label: 'GS25 상품권 이벤트', emoji: '🎁', desc: '부품 교체 시 GS25 쿠폰 지급 안내' },
@@ -700,14 +796,22 @@ export default function FlyerPage() {
 
   // 각 템플릿 상태
   const [gs25, setGs25] = useState<Gs25EventData>({
-    partName: '시트', damageDesc: '에어백 터짐', couponAmount: '5000', targetCompany: 'SK렌터카',
-    period: '26.05.01 ~ 26.05.31', contactNum: '010-2752-1054', partnerLogo: 'sk',
+    events: [
+      { part: '헤드램프', damage: '파손', amount: '5000' },
+      { part: '휠',       damage: '파손', amount: '3000' },
+      { part: '시트',     damage: '에어백 터짐', amount: '50000' },
+    ],
+    targetCompany: 'SK렌터카',
+    period: '26.06.02 ~ 별도 안내시까지',
+    contactNum: '010-2752-1054',
+    partnerLogo: 'sk',
     qrUrl: 'https://pf.kakao.com/_kXxkPG',
     showCoss: true,
-    cossAuthor: '박준희', cossDate: '2026-05-19', cossDept: '경영지원팀',
-    cossTitle: '에픽카 에코부품(시트) 사용 안내',
-    cossBodyBefore: '안녕하세요, 경영지원팀 박준희입니다.\n항상에서 노고가 많습니다.\n사고정비 업무 관련 공문사항 안내드립니다.',
-    cossHighlight: '금일(5월 19일)부터 사고 항목 품목 중 [시트 교체]가 필요한 건은',
+
+    cossAuthor: '박준희', cossDate: '2026-06-02', cossDept: '경영지원팀',
+    cossTitle: '에픽카 에코부품 사용 안내',
+    cossBodyBefore: '안녕하세요, 경영지원팀 박준희입니다.\n항상 노고가 많습니다.\n사고정비 업무 관련 공문사항 안내드립니다.',
+    cossHighlight: '헤드램프, 휠, 시트 교체가 필요한 건은 에픽카를 통해 진행 시, 에픽카에서 GS25 상품권을 제공합니다.',
     cossBodyAfter: '에픽카를 통해 작업 진행 부탁드립니다.\n\n업무에 참고 부탁드리며, 항상 협조해주셔서 감사합니다.',
   });
   const [wheel, setWheel] = useState<WheelBuybackData>({
@@ -762,6 +866,7 @@ export default function FlyerPage() {
     contactNum: '010-2752-1054', qrUrl: 'https://pf.kakao.com/_kXxkPG',
   });
 
+
   const handleDownload = useCallback(async () => {
     if (!previewRef.current) return;
     setDownloading(true);
@@ -769,7 +874,7 @@ export default function FlyerPage() {
       const dataUrl = await captureElement(previewRef.current);
       const a = document.createElement('a');
       a.href = dataUrl;
-      a.download = `eficar_flyer_${selected}_${Date.now()}.jpg`;
+      a.download = `eficar_flyer_${selected}_${Date.now()}.png`;
       a.click();
     } finally {
       setDownloading(false);
@@ -779,7 +884,7 @@ export default function FlyerPage() {
   // 이미지 캡처 후 단건 MMS 발송
   const sendMms = useCallback(async (phone: string, name: string) => {
     if (!previewRef.current || !phone) return false;
-    const dataUrl = await captureElement(previewRef.current);
+    const dataUrl = await captureElement(previewRef.current, true);
     const base64 = dataUrl.split(',')[1];
     const subject = mmsSubject || '에픽카 안내문';
     const content = mmsText.trim() || `[에픽카] ${subject}\n자세한 내용은 이미지를 확인해 주세요.\n문의: 010-2752-1054`;
@@ -805,7 +910,7 @@ export default function FlyerPage() {
       receipt_num: data.receiptNum,
     });
     return true;
-  }, [mmsSubject]);
+  }, [mmsSubject, mmsText]);
 
   // 단건 발송 핸들러
   const handleSendSingle = async () => {
@@ -876,7 +981,7 @@ export default function FlyerPage() {
 
   return (
     <main style={{ minHeight: 'calc(100vh - 56px)', background: '#F8F9FA' }}>
-      <div style={{ maxWidth: 1200, margin: '0 auto', padding: '24px' }}>
+      <div style={{ maxWidth: 1400, margin: '0 auto', padding: '24px' }}>
         {/* 헤더 */}
         <div style={{ marginBottom: 24 }}>
           <h1 style={{ fontSize: 22, fontWeight: 800, color: '#191F28' }}>안내문 / 플라이어 생성기</h1>
@@ -897,7 +1002,7 @@ export default function FlyerPage() {
           ))}
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '380px 1fr', gap: 24, alignItems: 'start' }}>
           {/* 편집 패널 */}
           <div className="card">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, cursor: 'pointer' }}
@@ -908,28 +1013,63 @@ export default function FlyerPage() {
 
             {expanded && selected === 'gs25_event' && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                <div>
-                  <label style={labelStyle}>부품명</label>
-                  <select value={gs25.partName} onChange={e => setGs25(p => ({ ...p, partName: e.target.value }))} style={inputStyle}>
-                    {['시트', '휠', '헤드램프', '에픽렌즈', '에어백'].map(v => <option key={v}>{v}</option>)}
-                  </select>
+
+                {/* 이벤트 3개 편집 */}
+                <div style={{ paddingBottom: 4 }}>
+                  <div style={{ fontSize: 12, fontWeight: 800, color: '#374151', marginBottom: 8 }}>이벤트 항목 (Event 1·2·3)</div>
+                  {gs25.events.map((ev, i) => (
+                    <div key={i} style={{ marginBottom: 10, padding: '10px 12px', background: '#F9FAFB', borderRadius: 8, border: '1px solid #E5E7EB' }}>
+                      <div style={{ fontSize: 11, fontWeight: 800, color: '#005957', marginBottom: 8 }}>Event {i + 1}</div>
+                      <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
+                        <div style={{ flex: 1 }}>
+                          <label style={labelStyle}>부품명</label>
+                          <select value={ev.part} onChange={e => setGs25(p => { const events = [...p.events]; events[i] = { ...events[i], part: e.target.value }; return { ...p, events }; })} style={inputStyle}>
+                            {['헤드램프', '휠', '시트', '에픽렌즈', '에어백', '범퍼'].map(v => <option key={v}>{v}</option>)}
+                          </select>
+                        </div>
+                        <div style={{ width: 90 }}>
+                          <label style={labelStyle}>금액 (원)</label>
+                          <input value={ev.amount} onChange={e => setGs25(p => { const events = [...p.events]; events[i] = { ...events[i], amount: e.target.value.replace(/[^0-9]/g, '') }; return { ...p, events }; })} style={inputStyle} placeholder="5000" />
+                        </div>
+                      </div>
+                      <div>
+                        <label style={labelStyle}>손상 유형</label>
+                        <input value={ev.damage} onChange={e => setGs25(p => { const events = [...p.events]; events[i] = { ...events[i], damage: e.target.value }; return { ...p, events }; })} style={inputStyle} placeholder="예: 파손, 에어백 터짐" />
+                      </div>
+                      <div style={{ marginTop: 6 }}>
+                        <label style={labelStyle}>GS25 상품권 사진</label>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+                          <span style={{ padding: '4px 10px', borderRadius: 7, border: '1.5px dashed #0369A1', fontSize: 11, fontWeight: 700, color: '#0369A1', background: 'white', whiteSpace: 'nowrap' }}>
+                            📎 첨부
+                          </span>
+                          {ev.cardImage
+                            ? <img src={ev.cardImage} alt="카드" style={{ height: 28, borderRadius: 4, border: '1px solid #BAE6FD' }} />
+                            : <span style={{ fontSize: 11, color: '#94A3B8' }}>없으면 자동 생성</span>}
+                          <input type="file" accept="image/*" style={{ display: 'none' }} onChange={e => {
+                            const file = e.target.files?.[0]; if (!file) return;
+                            const reader = new FileReader();
+                            reader.onload = ev2 => setGs25(p => {
+                              const events = [...p.events];
+                              events[i] = { ...events[i], cardImage: ev2.target?.result as string };
+                              return { ...p, events };
+                            });
+                            reader.readAsDataURL(file);
+                          }} />
+                        </label>
+                        {ev.cardImage && (
+                          <button onClick={() => setGs25(p => { const events = [...p.events]; events[i] = { ...events[i], cardImage: undefined }; return { ...p, events }; })}
+                            style={{ marginTop: 3, fontSize: 10, color: '#EF4444', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
+                            제거
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
                 </div>
-                <div>
-                  <label style={labelStyle}>손상 유형 (헤더 괄호 안)</label>
-                  <input value={gs25.damageDesc} onChange={e => setGs25(p => ({ ...p, damageDesc: e.target.value }))} style={inputStyle} placeholder="예: 에어백 터짐" />
-                </div>
-                <div>
-                  <label style={labelStyle}>상품권 금액 (원)</label>
-                  <input
-                    value={gs25.couponAmount}
-                    onChange={e => setGs25(p => ({ ...p, couponAmount: e.target.value.replace(/[^0-9]/g, '') }))}
-                    placeholder="예: 5000"
-                    style={inputStyle}
-                  />
-                </div>
+
                 <div>
                   <label style={labelStyle}>대상 고객사</label>
-                  <select value={gs25.targetCompany} onChange={e => setGs25(p => ({ ...p, targetCompany: e.target.value, partnerLogo: e.target.value.includes('SK') ? 'sk' : e.target.value.includes('롯데') ? 'lotte' : 'none' }))} style={inputStyle}>
+                  <select value={gs25.targetCompany} onChange={e => setGs25(p => ({ ...p, targetCompany: e.target.value, partnerLogo: e.target.value.includes('SK') ? 'sk' : e.target.value.includes('롯데') ? 'lotte' : 'none', showCoss: e.target.value.includes('SK') }))} style={inputStyle}>
                     {['SK렌터카', '롯데렌탈', '삼성화재', '그린카', '전체 고객사'].map(v => <option key={v}>{v}</option>)}
                   </select>
                 </div>
@@ -1224,25 +1364,25 @@ export default function FlyerPage() {
                     <button
                       onClick={() => {
                         const d = gs25;
-                        const amt = Number(d.couponAmount).toLocaleString('ko-KR');
+                        const evLines = d.events.map((ev, i) =>
+                          `■ Event${i + 1} ${ev.part} 수리 시 → GS25 ${Number(ev.amount).toLocaleString()}원권 100% 증정`
+                        ).join('\n');
                         setMmsText(
 `[${d.targetCompany} 협력 정비소 안내]
 안녕하세요,
 ${d.targetCompany} 협력 정비소 담당자님!
 
-1. 담당자님을 위한 '무제한' 증정 이벤트
-■ 혜택: 에픽카 '${d.partName} ${d.damageDesc} 수리 시' 1건당 ☞ GS25 ${amt}원권 ☜ 100% 증정
+담당자님을 위한 '무제한' GS25 상품권 증정 이벤트
+${evLines}
 ■ 한도: 제한 없음
 ■ 지급: 부품 사용 확인 후 익일 즉시 발송
 
-2. 참여 방법 (아주 간단합니다!)
-아래 번호를 통해 에픽카로 ${d.targetCompany} 차량 ${d.partName}수리 요청하시면 됩니다.
-☏빠른 전화/문자: ${d.contactNum}
-＠카카오톡 채널 [에픽카_정비소]: ${d.qrUrl}
-☞ 이벤트 기간: ${d.period}
+에픽카로 ${d.targetCompany} 차량 수리 요청하시면 됩니다.
+☏ 전화/문자: ${d.contactNum}
+＠카카오톡: [에픽카_정비소]
+☞ 기간: ${d.period}
 ☞ 프로모션은 사전 공지 없이 조기 종료될 수 있습니다.
-업무로 바쁘신 와중에도 협조해 주셔서 감사합니다.
-오늘 하루도 안전하고 활기찬 하루 보내세요!`
+감사합니다!`
                         );
                       }}
                       style={{ fontSize: 11, fontWeight: 700, color: '#005957', background: '#E6F2F2', border: '1px solid #A7F3D0', borderRadius: 6, padding: '3px 10px', cursor: 'pointer' }}
@@ -1339,8 +1479,9 @@ ${d.targetCompany} 협력 정비소 담당자님!
           </div>
 
           {/* 미리보기 */}
-          <div>
+          <div style={{ position: 'sticky', top: 16 }}>
             <div style={{ fontSize: 12, fontWeight: 600, color: '#8B95A1', marginBottom: 10 }}>미리보기</div>
+
             <div style={{ display: 'inline-block', boxShadow: '0 4px 24px rgba(0,0,0,0.12)', borderRadius: 12, overflow: 'hidden' }}>
               <div ref={previewRef}>
                 {selected === 'gs25_event' && <Gs25EventFlyer d={gs25} />}

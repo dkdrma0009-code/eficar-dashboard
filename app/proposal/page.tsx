@@ -229,7 +229,8 @@ export default function ProposalPage() {
       addLine(draft.closing, { size: 10, gap: 8 });
 
       // 푸터
-      const totalPages = (doc.internal as { getNumberOfPages: () => number }).getNumberOfPages();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const totalPages = ((doc as unknown as { internal: { getNumberOfPages: () => number } }).internal).getNumberOfPages();
       for (let p = 1; p <= totalPages; p++) {
         doc.setPage(p);
         doc.setFontSize(8); doc.setFont('helvetica', 'normal');

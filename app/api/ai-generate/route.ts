@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import type { CardItem, CardFormInput, CardLayout } from '@/app/cardnews/types';
+import type { CardFormInput } from '@/app/cardnews/types';
+
+type CardLayout = 'cover' | 'big-number' | 'before-after' | 'list' | 'customer-case' | 'timeline' | 'quote' | 'cta';
+type CardItem = { layout: CardLayout; data: Record<string, unknown> };
 import { correctParticlesDeep } from '@/lib/koreanParticles';
 import { callGemini } from '@/lib/gemini';
 

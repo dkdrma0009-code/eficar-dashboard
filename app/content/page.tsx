@@ -15,8 +15,8 @@ import {
   formatCurrency, formatCurrencyFull, formatPercent, formatMonth,
 } from '@/lib/dataUtils';
 import type { DashboardData } from '@/lib/types';
-import CardCanvas from '@/app/cardnews/components/CardCanvas';
-import type { CardItem } from '@/app/cardnews/types';
+import { buildCardHtml } from '@/lib/cardTemplates';
+import type { CardContent } from '@/lib/cardTemplates';
 
 const SAVINGS_RATE = 0.30;
 
@@ -355,7 +355,7 @@ export default function ContentPage() {
   // MMS 이미지
   const [mmsMode, setMmsMode] = useState(false);
   const [mmsImage, setMmsImage] = useState<{ base64: string; mime: string } | null>(null);
-  const [mmsCardForExport, setMmsCardForExport] = useState<CardItem | null>(null);
+  const [mmsCardForExport, setMmsCardForExport] = useState<CardContent | null>(null);
   const [mmsImageGenerating, setMmsImageGenerating] = useState(false);
 
   // LMS/MMS 제목
@@ -404,7 +404,7 @@ export default function ContentPage() {
   const [liImage, setLiImage] = useState<{ base64: string; mime: string; name: string } | null>(null);
   const [liPosting, setLiPosting] = useState(false);
   const [liPostFeedback, setLiPostFeedback] = useState('');
-  const [liCardForExport, setLiCardForExport] = useState<CardItem | null>(null);
+  const [liCardForExport, setLiCardForExport] = useState<CardContent | null>(null);
   const [liImageGenerating, setLiImageGenerating] = useState(false);
 
   const availableMonths = data ? [...data.allMonths].reverse() : [];
@@ -500,28 +500,23 @@ export default function ContentPage() {
     if (!contentData) return;
     setLiImageGenerating(true);
 
-    let card: CardItem;
+    let card: CardContent;
     const customerLabel = contentData.customer === '전체 고객사' ? '에픽카 파트너' : contentData.customer;
 
     if (contentData.growthStr) {
       card = {
-        layout: 'big-number',
-        data: {
-          tag: customerLabel,
-          number: contentData.growthStr,
-          unit: '매출 성장',
-          desc: `${contentData.todayLabel} 에픽카 공급 성과`,
-        },
+        type: 'kpi',
+        kpiLabel: customerLabel,
+        kpiNumber: contentData.growthStr,
+        kpiDesc: '매출 성장',
+        kpiTitle: `${contentData.todayLabel} 에픽카 공급 성과`,
       };
     } else {
       card = {
-        layout: 'cover',
-        data: {
-          badge: `에픽카 × ${customerLabel}`,
-          headline: `${contentData.monthsActive}개월 파트너십 성과`,
-          subheadline: contentData.totalSales,
-          highlight: contentData.topItem,
-        },
+        type: 'cover',
+        badge: `에픽카 × ${customerLabel}`,
+        headline: `${contentData.monthsActive}개월\n파트너십 성과`,
+        subtext: contentData.totalSales,
       };
     }
 
@@ -558,28 +553,23 @@ export default function ContentPage() {
     if (!contentData) return;
     setMmsImageGenerating(true);
 
-    let card: CardItem;
+    let card: CardContent;
     const customerLabel = contentData.customer === '전체 고객사' ? '에픽카 파트너' : contentData.customer;
 
     if (contentData.growthStr) {
       card = {
-        layout: 'big-number',
-        data: {
-          tag: customerLabel,
-          number: contentData.growthStr,
-          unit: '매출 성장',
-          desc: `${contentData.todayLabel} 에픽카 공급 성과`,
-        },
+        type: 'kpi',
+        kpiLabel: customerLabel,
+        kpiNumber: contentData.growthStr,
+        kpiDesc: '매출 성장',
+        kpiTitle: `${contentData.todayLabel} 에픽카 공급 성과`,
       };
     } else {
       card = {
-        layout: 'cover',
-        data: {
-          badge: `에픽카 × ${customerLabel}`,
-          headline: `${contentData.monthsActive}개월 파트너십 성과`,
-          subheadline: contentData.totalSales,
-          highlight: contentData.topItem,
-        },
+        type: 'cover',
+        badge: `에픽카 × ${customerLabel}`,
+        headline: `${contentData.monthsActive}개월\n파트너십 성과`,
+        subtext: contentData.totalSales,
       };
     }
 
@@ -2071,19 +2061,17 @@ export default function ContentPage() {
       {liCardForExport && (
         <div
           id="li-card-export"
-          style={{ position: 'fixed', top: -9999, left: -9999, pointerEvents: 'none' }}
-        >
-          <CardCanvas card={liCardForExport} ratio="4:5" forExport />
-        </div>
+          style={{ position: 'fixed', top: -9999, left: -9999, pointerEvents: 'none', width: 540, height: 540, overflow: 'hidden' }}
+          dangerouslySetInnerHTML={{ __html: buildCardHtml(liCardForExport) }}
+        />
       )}
       {/* MMS 카드 이미지 생성용 숨김 캔버스 */}
       {mmsCardForExport && (
         <div
           id="mms-card-export"
-          style={{ position: 'fixed', top: -9999, left: -9999, pointerEvents: 'none' }}
-        >
-          <CardCanvas card={mmsCardForExport} ratio="16:9" forExport />
-        </div>
+          style={{ position: 'fixed', top: -9999, left: -9999, pointerEvents: 'none', width: 540, height: 540, overflow: 'hidden' }}
+          dangerouslySetInnerHTML={{ __html: buildCardHtml(mmsCardForExport) }}
+        />
       )}
     </main>
   );

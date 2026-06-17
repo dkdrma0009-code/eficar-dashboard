@@ -96,6 +96,8 @@ async function sendScheduledSms(job: Awaited<ReturnType<typeof getScheduledSends
         job.subject ?? '',
         job.content,
         null,
+        false,
+        null,
         (res: unknown) => { console.log('[cron sms]', res); resolve(); },
         (err: { code: number; message: string }) => reject(new Error(`[${err.code}] ${err.message}`)),
       );
