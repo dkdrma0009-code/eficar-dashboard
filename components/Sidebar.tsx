@@ -10,7 +10,7 @@ import {
   Zap, LayoutDashboard, Users, FileText, Sparkles,
   Image, BarChart2, Send, Calendar, BookOpen,
   GitCompare, Upload, Newspaper, History, Contact, Bell, Clock,
-  ChevronDown, ChevronRight,
+  ChevronDown, ChevronRight, Instagram,
 } from 'lucide-react';
 
 type NavItem = {
@@ -54,6 +54,7 @@ const SECTIONS: NavSection[] = [
   {
     label: '관리',
     items: [
+      { href: '/instagram', label: '인스타그램',     icon: Instagram },
       { href: '/campaigns', label: '캠페인',        icon: Send },
       { href: '/history',   label: '발송 이력',     icon: History },
       { href: '/schedule',  label: '예약 발송',     icon: Clock },

@@ -52,16 +52,45 @@ export default function CardNewsPage() {
 
   const kpiPreset = useMemo<KpiPreset | undefined>(() => {
     if (!dashboardData || !Array.isArray(dashboardData.records)) return undefined;
-    const view = computeViewData(dashboardData.records, dashboardData.latestMonth, dashboardData.customers, dashboardData.latestMonth);
+    const view = computeViewData(
+      dashboardData.records,
+      dashboardData.latestMonth,
+      dashboardData.customers,
+      dashboardData.latestMonth,
+    );
+
     const metrics: string[] = [];
-    if (view.totalCurrentSales > 0) metrics.push(`이번달 매출 ${formatCurrency(view.totalCurrentSales)}`);
-    if (view.growthRate !== 0) metrics.push(`전월 대비 성장률 ${formatPercent(view.growthRate)}`);
-    if (view.transactionCount > 0) metrics.push(`거래건수 ${view.transactionCount}건 / 활성 고객사 ${view.activeCustomers}개`);
+
+    if (view.totalCurrentSales > 0) {
+      metrics.push(`이번달 매출 ${formatCurrency(view.totalCurrentSales)}`);
+    }
+
+    // MTD 진행 중인 달은 일평균 기준이라 음수 성장률이 나올 수 있음 → 양수만 사용
+    if (view.growthRate > 0) {
+      metrics.push(`전월 대비 성장률 +${Math.abs(view.growthRate).toFixed(1)}%`);
+    } else {
+      // 음수면 최고 성장 고객사 수치로 대체
+      const mvp = [...(view.customerStats ?? [])]
+        .sort((a, b) => b.growthRate - a.growthRate)[0];
+      if (mvp && mvp.growthRate > 0) {
+        metrics.push(`${mvp.name} 전월 대비 +${mvp.growthRate.toFixed(1)}% 성장`);
+      }
+    }
+
+    if (view.transactionCount > 0) {
+      metrics.push(`거래건수 ${view.transactionCount}건 / 활성 고객사 ${view.activeCustomers}개`);
+    }
+
+    // 매출 1위 고객사를 targetCustomer로 사용 (엑셀 원본 고객사명이 아닌 실적 기준)
+    const topCustomer = [...(view.customerStats ?? [])]
+      .filter(c => c.currentMonthSales > 0)
+      .sort((a, b) => b.currentMonthSales - a.currentMonthSales)[0];
+
     return {
       metric1: metrics[0],
       metric2: metrics[1],
       metric3: metrics[2],
-      targetCustomer: view.mvpCustomer?.name,
+      targetCustomer: topCustomer?.name,
     };
   }, [dashboardData]);
 
@@ -72,6 +101,7 @@ export default function CardNewsPage() {
     setSkeletonCount(input.cardCount ?? SKELETON_COUNT);
     setGeneratedCards([]);
     try {
+      console.log('[cardnews] sending:', { topic: input.topic, cardCount: input.cardCount });
       const res = await fetch('/api/ai-generate-html', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -103,10 +133,11 @@ export default function CardNewsPage() {
     try {
       const current = generatedCards[index];
       const newContent: CardContent = { ...current.content, ...patch };
+      const total = generatedCards.length;
       const res = await fetch('/api/ai-generate-html/render', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content: newContent }),
+        body: JSON.stringify({ content: newContent, index, total }),
       });
       const data = await res.json() as { html?: string; error?: string };
       if (data.html) {
