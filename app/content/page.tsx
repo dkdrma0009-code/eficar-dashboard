@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useCallback, useEffect } from 'react';
+import { useState, useMemo, useCallback, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Copy, Check, RefreshCw, Sparkles, Zap, ExternalLink, Send, Mail, BookOpen } from 'lucide-react';
 import { addLibraryItem } from '@/lib/libraryStorage';
@@ -309,7 +309,7 @@ function stripMarkdown(text: string): string {
     .replace(/_(.+?)_/g, '$1');         // _italic_ → italic
 }
 
-export default function ContentPage() {
+function ContentPageInner() {
   const { data } = useDashboardData();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -2074,5 +2074,13 @@ export default function ContentPage() {
         />
       )}
     </main>
+  );
+}
+
+export default function ContentPage() {
+  return (
+    <Suspense>
+      <ContentPageInner />
+    </Suspense>
   );
 }

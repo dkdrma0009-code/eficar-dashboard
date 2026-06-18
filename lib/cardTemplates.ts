@@ -1,7 +1,7 @@
 // Pure template functions — importable by both server routes and client components
 
 export interface CardContent {
-  type: 'cover' | 'kpi' | 'comparison' | 'customers' | 'list' | 'timeline' | 'cta';
+  type: 'cover' | 'kpi' | 'comparison' | 'customers' | 'list' | 'timeline' | 'cta' | 'chart';
   badge?: string;
   headline?: string;
   subtext?: string;
@@ -19,6 +19,12 @@ export interface CardContent {
   timeSteps?: { title: string; desc: string }[];
   ctaBadge?: string;
   ctaTitle?: string;
+  chartType?: 'bar' | 'line' | 'donut';
+  chartTitle?: string;
+  chartSubtitle?: string;
+  chartData?: { label: string; value: number; highlight?: boolean }[];
+  chartUnit?: string;
+  chartCaption?: string;
 }
 
 export interface GeneratedCard {
@@ -75,7 +81,6 @@ function buildCoverHtml(c: CardContent, index = 0, total = 1): string {
 </div>`;
 }
 
-// 수정 2: flex 레이아웃으로 박스가 남은 공간 채우기, 숫자 세로 가운데 정렬
 function buildKpiHtml(c: CardContent, index = 0, total = 1): string {
   const num = c.kpiNumber || '850%';
   const numLen = num.length;
@@ -83,15 +88,15 @@ function buildKpiHtml(c: CardContent, index = 0, total = 1): string {
   return `<div style='width:540px;height:540px;overflow:hidden;box-sizing:border-box;font-family:Pretendard,-apple-system,sans-serif;position:relative;background:#fff'>
   <div style='position:absolute;top:0;left:0;right:0;height:4px;background:#005957'></div>
   <div style='padding:36px 40px;height:100%;box-sizing:border-box;display:flex;flex-direction:column'>
-    <div style='display:flex;justify-content:space-between;align-items:center;margin-bottom:28px'>
+    <div style='display:flex;justify-content:space-between;align-items:center;margin-bottom:24px'>
       ${LOGO}
       ${slideNumHtml(index, total)}
     </div>
-    ${c.kpiTitle ? `<div style='font-size:28px;font-weight:900;color:#191F28;line-height:1.2;letter-spacing:-0.02em;margin-bottom:24px'>${nl(c.kpiTitle)}</div>` : ''}
     <div style='flex:1;background:#E8F5F2;border-radius:20px;padding:36px 40px;border:1px solid rgba(0,89,87,0.12);display:flex;flex-direction:column;justify-content:center'>
-      ${c.kpiLabel ? `<div style='font-size:13px;font-weight:700;color:#005957;letter-spacing:0.08em;margin-bottom:16px'>${e(c.kpiLabel)}</div>` : ''}
+      ${c.kpiTitle ? `<div style='font-size:22px;font-weight:900;color:#191F28;line-height:1.2;letter-spacing:-0.02em;margin-bottom:24px'>${nl(c.kpiTitle)}</div>` : ''}
+      ${c.kpiLabel ? `<div style='font-size:13px;font-weight:700;color:#005957;letter-spacing:0.08em;margin-bottom:12px'>${e(c.kpiLabel)}</div>` : ''}
       <div style='font-size:${numSize}px;font-weight:900;color:#005957;line-height:1;letter-spacing:-0.04em'>${e(num)}</div>
-      ${c.kpiDesc ? `<div style='font-size:16px;font-weight:500;color:#6B7280;margin-top:20px;line-height:1.5'>${e(c.kpiDesc)}</div>` : ''}
+      ${c.kpiDesc ? `<div style='font-size:15px;font-weight:500;color:#6B7280;margin-top:16px;line-height:1.5'>${e(c.kpiDesc)}</div>` : ''}
     </div>
   </div>
 </div>`;
@@ -196,7 +201,7 @@ function buildListHtml(c: CardContent, index = 0, total = 1): string {
 
 function buildTimelineHtml(c: CardContent, index = 0, total = 1): string {
   const steps = (c.timeSteps || []).slice(0, 4);
-  const stepH = Math.floor(360 / Math.max(steps.length, 1));
+  const stepGap = steps.length <= 3 ? 24 : 16;
 
   const stepHtml = steps.map((s, i) => {
     const isFirst = i === 0;
@@ -208,10 +213,10 @@ function buildTimelineHtml(c: CardContent, index = 0, total = 1): string {
     const lineGrad = isFirst
       ? 'linear-gradient(180deg,#005957,rgba(0,89,87,0.2))'
       : 'rgba(0,89,87,0.1)';
-    return `<div style='display:flex;gap:16px;height:${stepH}px'>
+    return `<div style='display:flex;gap:16px;padding-bottom:${!isLast ? stepGap + 'px' : '0'}'>
       <div style='display:flex;flex-direction:column;align-items:center;flex-shrink:0;width:36px'>
         <div style='width:36px;height:36px;border-radius:50%;background:${circleBg};${circleBorder}display:flex;align-items:center;justify-content:center;flex-shrink:0'><span style='font-size:15px;font-weight:900;color:${numColor}'>${i + 1}</span></div>
-        ${!isLast ? `<div style='flex:1;width:2px;background:${lineGrad};margin-top:4px'></div>` : ''}
+        ${!isLast ? `<div style='height:${stepGap + 8}px;width:2px;background:${lineGrad};margin-top:4px'></div>` : ''}
       </div>
       <div style='padding-top:6px'>
         <div style='font-size:17px;font-weight:800;color:${titleColor};margin-bottom:5px'>${e(s.title)}</div>
@@ -228,7 +233,146 @@ function buildTimelineHtml(c: CardContent, index = 0, total = 1): string {
   <div style='position:absolute;top:0;left:0;right:0;height:4px;background:#005957'></div>
   <div style='display:flex;justify-content:space-between;align-items:center;margin-bottom:6px'>${LOGO}${slideNumHtml(index, total)}</div>
   <div style='font-size:26px;font-weight:900;color:#191F28;letter-spacing:-0.02em;margin-bottom:28px'>${titleHtml}</div>
-  <div style='display:flex;flex-direction:column;gap:0'>${stepHtml}</div>
+  <div style='display:flex;flex-direction:column'>${stepHtml}</div>
+</div>`;
+}
+
+function buildChartSvg(
+  type: 'bar' | 'line' | 'donut',
+  data: { label: string; value: number; highlight?: boolean }[],
+  unit: string,
+  width: number,
+  height: number,
+): string {
+  if (type === 'bar') {
+    const maxVal = Math.max(...data.map(d => d.value), 1);
+    const barMaxH = height - 50; // top space for value label, bottom for x label
+    const rawBarW = width / (data.length * 1.8);
+    const barW = Math.min(rawBarW, 60);
+    const totalBarArea = data.length * barW;
+    const spacing = (width - totalBarArea) / (data.length + 1);
+    const bottomY = height - 30;
+
+    const bars = data.map((d, i) => {
+      const x = spacing + i * (barW + spacing);
+      const bh = Math.max(20, Math.round((d.value / maxVal) * barMaxH));
+      const y = bottomY - bh;
+      const fill = d.highlight !== false ? '#005957' : '#C8E6E5';
+      const labelX = x + barW / 2;
+      return `<rect x="${x}" y="${y}" width="${barW}" height="${bh}" fill="${fill}" rx="4" ry="4"/>
+<text x="${labelX}" y="${y - 6}" text-anchor="middle" font-size="13" font-weight="700" fill="#005957">${d.value}${unit}</text>
+<text x="${labelX}" y="${height}" text-anchor="middle" font-size="12" fill="#6B7280">${e(d.label)}</text>`;
+    }).join('');
+
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}">${bars}</svg>`;
+  }
+
+  if (type === 'line') {
+    const maxVal = Math.max(...data.map(d => d.value), 1);
+    const padL = 20, padR = 20, padT = 24, padB = 30;
+    const w = width - padL - padR;
+    const h = height - padT - padB;
+
+    const pts = data.map((d, i) => {
+      const x = padL + (data.length === 1 ? w / 2 : (i / (data.length - 1)) * w);
+      const y = padT + h - (d.value / maxVal) * h;
+      return { x, y, d };
+    });
+
+    const polyPts = pts.map(p => `${p.x},${p.y}`).join(' ');
+    const polyFill = [
+      pts[0] ? `${pts[0].x},${padT + h}` : '',
+      ...pts.map(p => `${p.x},${p.y}`),
+      pts[pts.length - 1] ? `${pts[pts.length - 1].x},${padT + h}` : '',
+    ].join(' ');
+
+    const circles = pts.map(p => {
+      const r = p.d.highlight !== false ? 5 : 4;
+      const fill = p.d.highlight !== false ? '#005957' : '#C8E6E5';
+      return `<circle cx="${p.x}" cy="${p.y}" r="${r}" fill="${fill}"/>
+<text x="${p.x}" y="${p.y - 9}" text-anchor="middle" font-size="12" font-weight="700" fill="#005957">${p.d.value}${unit}</text>
+<text x="${p.x}" y="${padT + h + 16}" text-anchor="middle" font-size="12" fill="#6B7280">${e(p.d.label)}</text>`;
+    }).join('');
+
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}">
+<polygon points="${polyFill}" fill="rgba(0,89,87,0.08)"/>
+<polyline points="${polyPts}" stroke="#005957" stroke-width="2.5" fill="none"/>
+${circles}
+</svg>`;
+  }
+
+  if (type === 'donut') {
+    const donutData = data.slice(0, 4);
+    const total = donutData.reduce((s, d) => s + d.value, 0) || 1;
+    const cx = 100, cy = height / 2;
+    const R = Math.min(cx, cy) - 16;
+    const r = R * 0.55;
+    const colors = ['#005957', '#2A9D8F', '#57CC99', '#C8E6E5'];
+
+    let startAngle = -Math.PI / 2;
+    const arcs = donutData.map((d, i) => {
+      const angle = (d.value / total) * 2 * Math.PI;
+      const endAngle = startAngle + angle;
+      const x1 = cx + R * Math.cos(startAngle);
+      const y1 = cy + R * Math.sin(startAngle);
+      const x2 = cx + R * Math.cos(endAngle);
+      const y2 = cy + R * Math.sin(endAngle);
+      const ix1 = cx + r * Math.cos(endAngle);
+      const iy1 = cy + r * Math.sin(endAngle);
+      const ix2 = cx + r * Math.cos(startAngle);
+      const iy2 = cy + r * Math.sin(startAngle);
+      const large = angle > Math.PI ? 1 : 0;
+      const path = `M${x1},${y1} A${R},${R} 0 ${large},1 ${x2},${y2} L${ix1},${iy1} A${r},${r} 0 ${large},0 ${ix2},${iy2} Z`;
+      startAngle = endAngle;
+      return `<path d="${path}" fill="${colors[i]}"/>`;
+    }).join('');
+
+    const maxItem = donutData.reduce((a, b) => b.value > a.value ? b : a, donutData[0]);
+    const centerLabel = maxItem ? `<text x="${cx}" y="${cy + 8}" text-anchor="middle" font-size="24" font-weight="900" fill="#005957">${maxItem.value}${unit}</text>` : '';
+
+    const legendX = cx * 2 + 16;
+    const legend = donutData.map((d, i) => {
+      const ly = 20 + i * 44;
+      return `<circle cx="${legendX + 8}" cy="${ly + 8}" r="7" fill="${colors[i]}"/>
+<text x="${legendX + 22}" y="${ly + 7}" font-size="13" fill="#374151" font-weight="600">${e(d.label)}</text>
+<text x="${legendX + 22}" y="${ly + 22}" font-size="13" fill="#005957" font-weight="800">${d.value}${unit}</text>`;
+    }).join('');
+
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}">
+${arcs}
+${centerLabel}
+${legend}
+</svg>`;
+  }
+
+  return '';
+}
+
+function buildChartHtml(c: CardContent, index = 0, total = 1): string {
+  const data = c.chartData ?? [];
+  const chartType = c.chartType ?? 'bar';
+  const unit = c.chartUnit ?? '';
+  const chartW = 460;
+  const chartH = chartType === 'donut' ? 200 : 260;
+
+  const svgHtml = data.length > 0
+    ? buildChartSvg(chartType, data, unit, chartW, chartH)
+    : `<div style='color:#9CA3AF;font-size:14px;text-align:center;padding:40px'>데이터 없음</div>`;
+
+  return `<div style='width:540px;height:540px;overflow:hidden;box-sizing:border-box;font-family:Pretendard,-apple-system,sans-serif;position:relative;background:#fff'>
+  <div style='position:absolute;top:0;left:0;right:0;height:4px;background:#005957'></div>
+  <div style='padding:32px 36px;height:100%;box-sizing:border-box;display:flex;flex-direction:column'>
+    <div style='display:flex;justify-content:space-between;align-items:center;margin-bottom:6px'>
+      ${LOGO}
+      ${slideNumHtml(index, total)}
+    </div>
+    ${c.chartTitle ? `<div style='font-size:24px;font-weight:900;color:#191F28;line-height:1.2;letter-spacing:-0.02em;margin-bottom:4px'>${nl(c.chartTitle)}</div>` : ''}
+    ${c.chartSubtitle ? `<div style='font-size:14px;color:#6B7280;margin-bottom:16px'>${e(c.chartSubtitle)}</div>` : '<div style="margin-bottom:16px"></div>'}
+    <div style='flex:1;display:flex;align-items:center;justify-content:center'>
+      ${svgHtml}
+    </div>
+    ${c.chartCaption ? `<div style='font-size:12px;color:#9CA3AF;text-align:center;margin-top:8px'>${e(c.chartCaption)}</div>` : ''}
+  </div>
 </div>`;
 }
 
@@ -268,6 +412,7 @@ export function buildCardHtml(card: CardContent, index = 0, total = 1): string {
     case 'comparison': return buildComparisonHtml(card, index, total);
     case 'list':       return buildListHtml(card, index, total);
     case 'timeline':   return buildTimelineHtml(card, index, total);
+    case 'chart':      return buildChartHtml(card, index, total);
     case 'cta':        return buildCtaHtml(card, index, total);
     default:           return buildCoverHtml(card, index, total);
   }

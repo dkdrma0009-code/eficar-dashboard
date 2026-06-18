@@ -21,6 +21,7 @@ const CARD_TYPES = `
 - customers: 파트너사 성과 2×2그리드. custTitle(제목), customers([{name,metric,value,note}] 최대4개)
 - list: 번호 리스트. listTitle(제목), listItems([{num,title,desc}] 최대4개)
 - timeline: 단계 프로세스. timeTitle(제목), timeSteps([{title,desc}] 최대4개)
+- chart: 데이터 시각화. chartType("bar"|"line"|"donut"), chartTitle(제목), chartData([{label,value,highlight}]), chartUnit(단위), chartCaption(설명). bar: 고객사별 실적 비교 / line: 월별 매출 추이 / donut: 매출 구성 비율. highlight:true인 항목이 에픽카 강점 수치. 데이터는 에픽카 실제 수치 기반(롯데렌탈 304%, SK렌터카 1.6억, 그린카 90%).
 - cta: 마지막 CTA. ctaBadge(상단레이블), ctaTitle(메인카피, \\n 줄바꿈)
 `;
 
@@ -74,8 +75,10 @@ function buildPrompt(
   cardCount: number,
 ): string {
   const metricsText = metrics.filter(Boolean).join(', ');
-  const order = cardCount >= 5
-    ? `cover → kpi → (comparison 또는 customers) → list → cta 순서 기반, 총 ${cardCount}장`
+  const order = cardCount >= 6
+    ? `cover → kpi → chart → (comparison 또는 customers) → list → cta, 총 ${cardCount}장`
+    : cardCount >= 5
+    ? `cover → kpi → (comparison 또는 customers) → list → cta, 총 ${cardCount}장`
     : `cover → kpi → cta, 총 ${cardCount}장`;
 
   return `당신은 에픽카 마케팅팀의 카드뉴스 기획자입니다.

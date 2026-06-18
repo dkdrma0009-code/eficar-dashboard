@@ -53,7 +53,9 @@ function extractCustomer(text: string): string {
   return '전체';
 }
 
-export default function CampaignsPage() {
+import { Suspense } from 'react';
+
+function CampaignsPageInner() {
   const { data } = useDashboardData();
   const [records, setRecords] = useState<CampaignRecord[]>([]);
   const [showForm, setShowForm] = useState(false);
@@ -1097,5 +1099,13 @@ export default function CampaignsPage() {
       </div>
     )}
     </>
+  );
+}
+
+export default function CampaignsPage() {
+  return (
+    <Suspense>
+      <CampaignsPageInner />
+    </Suspense>
   );
 }
